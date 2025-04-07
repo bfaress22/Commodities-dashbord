@@ -1,4 +1,3 @@
-
 import { cn } from "@/lib/utils";
 
 interface PriceChangeProps {
@@ -18,8 +17,8 @@ export default function PriceChange({ value, isPercentage = false, className }: 
       : 'text-trend-down';
       
   const formattedValue = isPercentage
-    ? `${isPositive ? '+' : ''}${value.toFixed(2)}%`
-    : `${isPositive ? '+' : ''}${value.toFixed(2)}`;
+    ? `${isPositive ? '+' : (value < 0 ? '-' : '')}${Math.abs(value).toFixed(2)}%`
+    : `${isPositive ? '+' : (value < 0 ? '-' : '')}${Math.abs(value).toFixed(2)}`;
     
   return (
     <span className={cn(colorClass, className)}>
