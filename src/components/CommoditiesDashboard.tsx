@@ -1,31 +1,40 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Commodity, fetchCommoditiesData, CommodityCategory } from "@/services/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CommoditiesTable from "./CommoditiesTable";
 import CommodityCard from "./CommodityCard";
-import { AlertCircle, RefreshCw, Droplet, Wheat, Factory } from "lucide-react";
+import SearchBar from "./SearchBar";
+import { useFavorites } from "@/hooks/useFavorites";
+import { AlertCircle, RefreshCw, Droplet, Wheat, Factory, Ship, Heart, Fuel } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function CommoditiesDashboard() {
+  // États et hooks
+  const { favorites, favoritesCount, favoriteSymbols } = useFavorites();
+  
   // État pour stocker les commodités par catégorie
   const [metalsCommodities, setMetalsCommodities] = useState<Commodity[]>([]);
   const [agriculturalCommodities, setAgriculturalCommodities] = useState<Commodity[]>([]);
   const [energyCommodities, setEnergyCommodities] = useState<Commodity[]>([]);
+  const [freightCommodities, setFreightCommodities] = useState<Commodity[]>([]);
+  const [bunkerCommodities, setBunkerCommodities] = useState<Commodity[]>([]);
   
   // État pour le chargement et les erreurs par catégorie
   const [loading, setLoading] = useState({
     metals: true,
     agricultural: true,
-    energy: true
+    energy: true,
+    freight: true,
+    bunker: true
   });
   const [error, setError] = useState<{[key in CommodityCategory]?: string | null}>({});
   const [lastUpdated, setLastUpdated] = useState<{[key in CommodityCategory]?: Date | null}>({});
 
   // État pour la catégorie active
-  const [activeCategory, setActiveCategory] = useState<CommodityCategory>('metals');
+  const [activeCategory, setActiveCategory] = useState<CommodityCategory | 'favorites'>('metals');
 
   // Charger les données pour une catégorie spécifique
   const loadCategoryData = async (category: CommodityCategory) => {
@@ -42,6 +51,10 @@ export default function CommoditiesDashboard() {
         setAgriculturalCommodities(data);
       } else if (category === 'energy') {
         setEnergyCommodities(data);
+      } else if (category === 'freight') {
+        setFreightCommodities(data);
+      } else if (category === 'bunker') {
+        setBunkerCommodities(data);
       }
       
       setLastUpdated(prev => ({ ...prev, [category]: new Date() }));
@@ -60,6 +73,10 @@ export default function CommoditiesDashboard() {
         setAgriculturalCommodities([]);
       } else if (category === 'energy') {
         setEnergyCommodities([]);
+      } else if (category === 'freight') {
+        setFreightCommodities([]);
+      } else if (category === 'bunker') {
+        setBunkerCommodities([]);
       }
     } finally {
       setLoading(prev => ({ ...prev, [category]: false }));
@@ -71,7 +88,9 @@ export default function CommoditiesDashboard() {
     await Promise.all([
       loadCategoryData('metals'),
       loadCategoryData('agricultural'),
-      loadCategoryData('energy')
+      loadCategoryData('energy'),
+      loadCategoryData('freight'),
+      loadCategoryData('bunker')
     ]);
   };
 
@@ -96,9 +115,65 @@ export default function CommoditiesDashboard() {
         return agriculturalCommodities;
       case 'energy':
         return energyCommodities;
+      case 'freight':
+        return freightCommodities;
+      case 'bunker':
+        return bunkerCommodities;
+      case 'favorites':
+        return favoriteCommodities;
       default:
         return metalsCommodities;
     }
+  };
+
+  // Combiner toutes les commodités pour la recherche
+  const allCommodities = useMemo(() => {
+    return [
+      ...metalsCommodities,
+      ...agriculturalCommodities,
+      ...energyCommodities,
+      ...freightCommodities,
+      ...bunkerCommodities
+    ];
+  }, [metalsCommodities, agriculturalCommodities, energyCommodities, freightCommodities, bunkerCommodities]);
+
+  // Get favorite commodities from all categories - optimized for performance
+  const favoriteCommodities = useMemo(() => {
+    if (allCommodities.length === 0 || favoriteSymbols.length === 0) {
+      return [];
+    }
+    
+    // Create a set for O(1) lookup performance
+    const favoriteSymbolsSet = new Set(favoriteSymbols);
+    
+    const filtered = allCommodities.filter(commodity => 
+      favoriteSymbolsSet.has(commodity.symbol)
+    );
+    
+    // Sort by the order they were added to favorites (most recent first)
+    return filtered.sort((a, b) => {
+      const aIndex = favorites.findIndex(f => f.symbol === a.symbol);
+      const bIndex = favorites.findIndex(f => f.symbol === b.symbol);
+      return bIndex - aIndex;
+    });
+  }, [allCommodities, favoriteSymbols, favorites]);
+
+  // Auto-load data when switching to favorites tab if needed
+  useEffect(() => {
+    if (activeCategory === 'favorites' && allCommodities.length === 0) {
+      loadAllData();
+    }
+  }, [activeCategory, allCommodities.length]);
+
+  // Gérer la sélection d'une commodité depuis la recherche
+  const handleSelectCommodity = (commodity: Commodity) => {
+    // Naviguer vers la catégorie appropriée
+    setActiveCategory(commodity.category as CommodityCategory);
+    
+    // Scroll vers le symbole ou afficher une notification
+    toast.success(`Navigated to ${commodity.symbol} in ${commodity.category}`, {
+      description: `Current price: ${commodity.price.toLocaleString()}`
+    });
   };
 
   // Filtrer les commodités par type
@@ -123,6 +198,17 @@ export default function CommoditiesDashboard() {
   const gasolineCommodities = energyCommodities.filter(c => c.type === 'gasoline');
   const naturalGasCommodities = energyCommodities.filter(c => c.type === 'natural_gas');
   const heatingOilCommodities = energyCommodities.filter(c => c.type === 'heating_oil');
+  
+  // Freight
+  const containerCommodities = freightCommodities.filter(c => c.type === 'container');
+  const freightRouteCommodities = freightCommodities.filter(c => c.type === 'freight_route');
+  const lngFreightCommodities = freightCommodities.filter(c => c.type === 'lng_freight');
+  const dirtyFreightCommodities = freightCommodities.filter(c => c.type === 'dirty_freight');
+  
+  // Bunker
+  const vlsfoCommodities = bunkerCommodities.filter(c => c.type === 'vlsfo');
+  const mgoCommodities = bunkerCommodities.filter(c => c.type === 'mgo');
+  const ifo380Commodities = bunkerCommodities.filter(c => c.type === 'ifo380');
 
   // Composant de cartes de chargement
   const LoadingCards = ({ count = 4 }) => (
@@ -154,35 +240,46 @@ export default function CommoditiesDashboard() {
   );
 
   // Obtenir l'état de chargement actuel
-  const isLoading = loading[activeCategory];
-  const currentError = error[activeCategory];
-  const currentLastUpdated = lastUpdated[activeCategory];
+  const isLoading = activeCategory === 'favorites' ? false : loading[activeCategory as CommodityCategory];
+  const currentError = activeCategory === 'favorites' ? null : error[activeCategory as CommodityCategory];
+  const currentLastUpdated = activeCategory === 'favorites' ? null : lastUpdated[activeCategory as CommodityCategory];
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Commodities Dashboard</h1>
-          <p className="text-muted-foreground">
-            Track prices and trends of precious metals, agricultural products, and energy commodities
-          </p>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {currentLastUpdated && (
-            <p className="text-sm text-muted-foreground">
-              Last updated: {currentLastUpdated.toLocaleTimeString()}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Commodities Dashboard</h1>
+            <p className="text-muted-foreground">
+              Track prices and trends of precious metals, agricultural products, and energy commodities
             </p>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadCategoryData(activeCategory)}
-            disabled={isLoading}
-          >
-            <RefreshCw size={16} className={isLoading ? "animate-spin mr-2" : "mr-2"} />
-            Refresh
-          </Button>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            {/* Barre de recherche */}
+            <SearchBar 
+              commodities={allCommodities}
+              onSelectCommodity={handleSelectCommodity}
+              placeholder="Search commodities..."
+            />
+            
+            <div className="flex items-center gap-2">
+              {currentLastUpdated && (
+                <p className="text-sm text-muted-foreground whitespace-nowrap">
+                  Last updated: {currentLastUpdated.toLocaleTimeString()}
+                </p>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                            onClick={() => activeCategory !== 'favorites' && loadCategoryData(activeCategory)}
+            disabled={isLoading || activeCategory === 'favorites'}
+              >
+                <RefreshCw size={16} className={isLoading ? "animate-spin mr-2" : "mr-2"} />
+                Refresh
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -197,9 +294,20 @@ export default function CommoditiesDashboard() {
       <Tabs 
         defaultValue="metals" 
         className="space-y-4"
-        onValueChange={(value) => setActiveCategory(value as CommodityCategory)}
+        value={activeCategory}
+        onValueChange={(value) => setActiveCategory(value as CommodityCategory | 'favorites')}
       >
-        <TabsList className="grid grid-cols-3 w-full md:w-[400px]">
+        <TabsList className="grid grid-cols-6 w-full md:w-[720px]">
+          <TabsTrigger value="favorites" className="flex items-center gap-2">
+            <Heart size={16} />
+            <span className="hidden sm:inline">Favorites</span>
+            <span className="sm:hidden">❤️</span>
+            {favoritesCount > 0 && (
+              <span className="ml-1 bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[18px] h-[18px] flex items-center justify-center">
+                {favoritesCount}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="metals" className="flex items-center gap-2">
             <Factory size={16} />
             <span>Metals</span>
@@ -211,6 +319,14 @@ export default function CommoditiesDashboard() {
           <TabsTrigger value="energy" className="flex items-center gap-2">
             <Droplet size={16} />
             <span>Energy</span>
+          </TabsTrigger>
+          <TabsTrigger value="freight" className="flex items-center gap-2">
+            <Ship size={16} />
+            <span>Freight</span>
+          </TabsTrigger>
+          <TabsTrigger value="bunker" className="flex items-center gap-2">
+            <Fuel size={16} />
+            <span>Bunker</span>
           </TabsTrigger>
         </TabsList>
         
@@ -699,6 +815,369 @@ export default function CommoditiesDashboard() {
               </div>
             </TabsContent>
           </Tabs>
+        </TabsContent>
+        
+        {/* Onglet Freight */}
+        <TabsContent value="freight" className="space-y-4">
+          <Tabs defaultValue="all" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="container">Container</TabsTrigger>
+              <TabsTrigger value="routes">Freight Routes</TabsTrigger>
+              <TabsTrigger value="lng">LNG Freight</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="all" className="space-y-6">
+              {isLoading ? (
+                <Skeleton className="h-[300px] w-full rounded-md" />
+              ) : freightCommodities.length > 0 ? (
+                <CommoditiesTable commodities={freightCommodities} />
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No data available
+                </div>
+              )}
+              
+              {isLoading ? (
+                <LoadingCards count={4} />
+              ) : freightCommodities.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {freightCommodities.slice(0, 4).map(commodity => (
+                    <CommodityCard key={commodity.symbol} commodity={commodity} />
+                  ))}
+                </div>
+              ) : null}
+            </TabsContent>
+            
+            <TabsContent value="container" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Container Freight</CardTitle>
+                  <CardDescription>Current trends for container shipping routes</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <div className="space-y-4">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} className="h-[100px] w-full" />
+                      ))}
+                    </div>
+                  ) : containerCommodities.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-4">
+                      {containerCommodities.map(commodity => (
+                        <CommodityCard key={commodity.symbol} commodity={commodity} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      No data available
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="routes" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Freight Routes</CardTitle>
+                  <CardDescription>Baltic and Platts freight route futures</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <div className="space-y-4">
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <Skeleton key={i} className="h-[100px] w-full" />
+                      ))}
+                    </div>
+                  ) : freightRouteCommodities.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {freightRouteCommodities.map(commodity => (
+                        <CommodityCard key={commodity.symbol} commodity={commodity} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      No data available
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="lng" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>LNG Freight</CardTitle>
+                    <CardDescription>Liquefied Natural Gas shipping rates</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoading ? (
+                      <div className="space-y-4">
+                        {Array.from({ length: 2 }).map((_, i) => (
+                          <Skeleton key={i} className="h-[100px] w-full" />
+                        ))}
+                      </div>
+                    ) : lngFreightCommodities.length > 0 ? (
+                      <div className="grid grid-cols-1 gap-4">
+                        {lngFreightCommodities.map(commodity => (
+                          <CommodityCard key={commodity.symbol} commodity={commodity} />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-muted-foreground">
+                        No data available
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Dirty Freight</CardTitle>
+                    <CardDescription>Oil and dirty cargo shipping rates</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoading ? (
+                      <div className="space-y-4">
+                        {Array.from({ length: 2 }).map((_, i) => (
+                          <Skeleton key={i} className="h-[100px] w-full" />
+                        ))}
+                      </div>
+                    ) : dirtyFreightCommodities.length > 0 ? (
+                      <div className="grid grid-cols-1 gap-4">
+                        {dirtyFreightCommodities.map(commodity => (
+                          <CommodityCard key={commodity.symbol} commodity={commodity} />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-muted-foreground">
+                        No data available
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </TabsContent>
+        
+        {/* Onglet Bunker Prices */}
+        <TabsContent value="bunker" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">Bunker Prices</h2>
+              <p className="text-muted-foreground">
+                Prix des carburants marins en temps réel depuis Ship & Bunker
+              </p>
+            </div>
+            
+            {bunkerCommodities.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadCategoryData('bunker')}
+                disabled={loading.bunker}
+              >
+                <RefreshCw size={16} className={loading.bunker ? "animate-spin mr-2" : "mr-2"} />
+                Actualiser
+              </Button>
+            )}
+          </div>
+          
+          <Tabs defaultValue="all" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="all">Tous</TabsTrigger>
+              <TabsTrigger value="vlsfo">VLSFO</TabsTrigger>
+              <TabsTrigger value="mgo">MGO</TabsTrigger>
+              <TabsTrigger value="ifo380">IFO380</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="all" className="space-y-6">
+              {loading.bunker ? (
+                <Skeleton className="h-[300px] w-full rounded-md" />
+              ) : bunkerCommodities.length > 0 ? (
+                <CommoditiesTable commodities={bunkerCommodities} />
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  Aucune donnée disponible
+                </div>
+              )}
+              
+              {loading.bunker ? (
+                <LoadingCards count={4} />
+              ) : bunkerCommodities.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {bunkerCommodities.slice(0, 4).map(commodity => (
+                    <CommodityCard key={commodity.symbol} commodity={commodity} />
+                  ))}
+                </div>
+              ) : null}
+            </TabsContent>
+            
+            <TabsContent value="vlsfo" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>VLSFO (Very Low Sulfur Fuel Oil)</CardTitle>
+                  <CardDescription>Prix du carburant maritime à très faible teneur en soufre</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loading.bunker ? (
+                    <div className="space-y-4">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} className="h-[100px] w-full" />
+                      ))}
+                    </div>
+                  ) : vlsfoCommodities.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {vlsfoCommodities.map(commodity => (
+                        <CommodityCard key={commodity.symbol} commodity={commodity} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      Aucune donnée disponible
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="mgo" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>MGO (Marine Gas Oil)</CardTitle>
+                  <CardDescription>Prix du gazole marin</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loading.bunker ? (
+                    <div className="space-y-4">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} className="h-[100px] w-full" />
+                      ))}
+                    </div>
+                  ) : mgoCommodities.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {mgoCommodities.map(commodity => (
+                        <CommodityCard key={commodity.symbol} commodity={commodity} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      Aucune donnée disponible
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="ifo380" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>IFO380 (Intermediate Fuel Oil 380)</CardTitle>
+                  <CardDescription>Prix du fuel marin intermédiaire 380</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loading.bunker ? (
+                    <div className="space-y-4">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} className="h-[100px] w-full" />
+                      ))}
+                    </div>
+                  ) : ifo380Commodities.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {ifo380Commodities.map(commodity => (
+                        <CommodityCard key={commodity.symbol} commodity={commodity} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      Aucune donnée disponible
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </TabsContent>
+        
+        {/* Favorites Tab */}
+        <TabsContent value="favorites" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">Your Favorites</h2>
+              <p className="text-muted-foreground">
+                {favoritesCount > 0 
+                  ? `Vous suivez ${favoritesCount} commodité${favoritesCount === 1 ? '' : 's'}`
+                  : "Aucun favori ajouté pour le moment"
+                }
+              </p>
+            </div>
+            
+            {favoritesCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadAllData()}
+              >
+                <RefreshCw size={16} className="mr-2" />
+                Actualiser
+              </Button>
+            )}
+          </div>
+
+          {favoritesCount === 0 ? (
+            <Card className="p-8">
+              <div className="text-center space-y-4">
+                <Heart className="mx-auto h-16 w-16 text-muted-foreground" />
+                <div className="space-y-2">
+                  <h3 className="text-xl font-semibold">Créer votre liste de suivi</h3>
+                  <p className="text-muted-foreground max-w-md mx-auto">
+                    Ajoutez des commodités à vos favoris en cliquant sur l'étoile ⭐ dans n'importe quel tableau ou carte. 
+                    Cela vous aidera à suivre rapidement les symboles qui vous intéressent le plus.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 justify-center mt-6">
+                  {[
+                    { key: 'metals', label: 'Parcourir Métaux' },
+                    { key: 'agricultural', label: 'Parcourir Agriculture' },
+                    { key: 'energy', label: 'Parcourir Énergie' },
+                    { key: 'freight', label: 'Parcourir Fret' }
+                  ].map(({ key, label }) => (
+                    <Button
+                      key={key}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setActiveCategory(key as CommodityCategory)}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          ) : (
+            <>
+              {/* Favorites Table */}
+              <CommoditiesTable commodities={favoriteCommodities} />
+              
+              {/* Favorites Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {favoriteCommodities.slice(0, 8).map(commodity => (
+                  <CommodityCard key={commodity.symbol} commodity={commodity} />
+                ))}
+              </div>
+
+              {favoriteCommodities.length > 8 && (
+                <div className="text-center pt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Showing first 8 favorites in cards view. View all {favoritesCount} in the table above.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
         </TabsContent>
       </Tabs>
     </div>

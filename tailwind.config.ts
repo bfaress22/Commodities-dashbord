@@ -71,6 +71,13 @@ export default {
 					aluminum: '#A9A9A9',
 					cobalt: '#5F9EA0',
 				},
+				// Couleurs pour les transports et freight
+				freight: {
+					container: '#2563EB', // Bleu
+					route: '#059669',     // Vert émeraude
+					lng: '#7C3AED',       // Violet
+					dirty: '#DC2626',     // Rouge
+				},
 				trend: {
 					up: '#22c55e',
 					down: '#ef4444',
