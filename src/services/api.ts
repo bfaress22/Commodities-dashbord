@@ -2,11 +2,11 @@ import { toast } from "sonner";
 import { parse } from "node-html-parser";
 
 // API key variable that can be updated
-let API_KEY = 'V06SpYv2b/ptbqPxnvvhtg==3F5KAONfyIW0JKVl';
+let API_KEY = 'Mhb1Gpa9jcM1WDHYKmfhjw==qcK3Oib7hEScQf8h';
 
 // Function to update the API key
 export function updateApiKey(newKey: string) {
-  API_KEY = newKey;
+  // Ne rien faire, la clé est codée en dur
 }
 
 // Function to validate the API key
@@ -32,7 +32,7 @@ export async function validateApiKey(key: string): Promise<boolean> {
   }
 }
 
-// Types de matières premières disponibles
+// List of available commodity types
 export type CommodityCategory = 'metals' | 'agricultural' | 'energy' | 'freight' | 'bunker';
 
 // Interfaces for commodity data
@@ -53,7 +53,7 @@ export interface Commodity {
   category: CommodityCategory;
 }
 
-// Liste des symboles freight avec leurs informations
+// List of freight symbols with their information
 const FREIGHT_SYMBOLS = [
   // Container Freight
   { symbol: 'CS61!', name: 'Container Freight (China/East Asia to Mediterranean) (FBX13) (Baltic) Futures', type: 'container' as const },
@@ -103,7 +103,7 @@ const FREIGHT_SYMBOLS = [
 ];
 
 /**
- * Récupère les données d'un symbole freight spécifique depuis TradingView
+ * Retrieves data for a specific freight symbol from TradingView
  */
 async function fetchFreightSymbolData(symbol: string, name: string, type: Commodity['type']): Promise<Commodity | null> {
   try {
@@ -127,16 +127,16 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
       return null;
     }
 
-    // Parser le HTML pour extraire les données
+    // Parse the HTML to extract data
     const htmlContent = data.data;
     const root = parse(htmlContent);
     
-    // Extraire le prix principal
+    // Extract the main price
     let price = 0;
     let percentChange = 0;
     let absoluteChange = 0;
     
-         // Rechercher les éléments de prix dans différents sélecteurs possibles
+         // Search for price elements in different possible selectors
      const priceSelectors = [
        '.tv-symbol-price-quote__value',
        '[data-field="last_price"]',
@@ -151,51 +151,46 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
          const rawPriceText = priceElement.text.trim();
          console.log(`Raw price text for ${symbol}: "${rawPriceText}"`);
          
-         // Parser les prix avec séparateurs de milliers (ex: "9,564" ou "1,234.56")
+         // Parse prices correctly for TradingView format
          let priceText = rawPriceText;
          
-         // Enlever les unités et espaces
+         // Remove units and spaces
          priceText = priceText.replace(/\s*(USD|usd|$|€|EUR|eur)\s*/gi, '');
          
-         // Gérer les formats de nombres internationaux
-         // Si on a plus d'une virgule ou point, c'est probablement des séparateurs de milliers
-         const commaCount = (priceText.match(/,/g) || []).length;
-         const dotCount = (priceText.match(/\./g) || []).length;
+         // TradingView uses comma for thousands and dot for decimals
+         // Examples: "23.1672", "1,234.56", "9,564", "0.1234"
          
-         if (commaCount > 1 || dotCount > 1) {
-           // Multiple séparateurs = séparateurs de milliers
-           // Garder seulement le dernier pour les décimales
-           if (priceText.includes('.') && priceText.lastIndexOf('.') > priceText.lastIndexOf(',')) {
-             // Format américain: 1,234.56
+         // Remove all non-numeric characters except commas and dots
+         priceText = priceText.replace(/[^\d.,]/g, '');
+         
+         // Handle TradingView number format
+         if (priceText.includes(',') && priceText.includes('.')) {
+           // Format like "1,234.56" - comma is thousand separator, dot is decimal
+           const lastDotIndex = priceText.lastIndexOf('.');
+           const lastCommaIndex = priceText.lastIndexOf(',');
+           
+           if (lastDotIndex > lastCommaIndex) {
+             // Standard format: remove commas, keep dots
              priceText = priceText.replace(/,/g, '');
            } else {
-             // Format européen: 1.234,56
-             priceText = priceText.replace(/\./g, '').replace(',', '.');
+             // Unusual format: treat comma as decimal
+             priceText = priceText.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
            }
-         } else if (commaCount === 1 && dotCount === 0) {
-           // Une seule virgule - pourrait être séparateur décimal ou milliers
-           const parts = priceText.split(',');
-           if (parts[1] && parts[1].length <= 2) {
-             // Probablement décimal (ex: "12,34")
-             priceText = priceText.replace(',', '.');
-           } else {
-             // Probablement séparateur de milliers (ex: "9,564")
-             priceText = priceText.replace(',', '');
-           }
-         } else if (dotCount === 1 && commaCount === 0) {
-           // Un seul point - laisser tel quel
-           // priceText = priceText (déjà correct)
-         } else {
-           // Cas complexe - enlever tout sauf dernière virgule/point
-           priceText = priceText.replace(/[^\d.,]/g, '');
-           if (priceText.includes('.') && priceText.includes(',')) {
-             if (priceText.lastIndexOf('.') > priceText.lastIndexOf(',')) {
-               priceText = priceText.replace(/,/g, '');
-             } else {
-               priceText = priceText.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
-             }
-           }
-         }
+                   } else if (priceText.includes(',') && !priceText.includes('.')) {
+            // Only comma present
+            const parts = priceText.split(',');
+            if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
+              // Likely thousand separator (like "7,287" or "1,234")
+              priceText = priceText.replace(/,/g, '');
+            } else if (parts.length === 2 && parts[1].length <= 4) {
+              // Likely decimal separator (like "12,34" or "23,1672")
+              priceText = priceText.replace(',', '.');
+            } else {
+              // Multiple commas or other cases - remove all commas
+              priceText = priceText.replace(/,/g, '');
+            }
+          }
+         // If only dots or no separators, keep as is
          
          console.log(`Processed price text for ${symbol}: "${priceText}"`);
          price = parseFloat(priceText) || 0;
@@ -207,14 +202,14 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
        }
      }
      
-     // Si pas de prix trouvé, chercher dans le contenu général avec regex améliorée
+     // If no price found, search in general content with improved regex
      if (price === 0) {
-       // Chercher des patterns comme "9,564 USD" ou "1,234.56 USD"
+       // Search for price patterns in HTML content
        const pricePatterns = [
-         /(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*USD/i,
-         /(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)\s*USD/i,
-         /(\d+(?:[,\.]\d+)*)\s*USD/i,
-         /(\d+\.?\d*)\s*USD/i
+         /(\d+\.\d{1,4})\s*USD/i,  // Match decimal prices like "23.1672 USD"
+         /(\d{1,3}(?:,\d{3})*\.\d{1,4})\s*USD/i,  // Match "1,234.5678 USD"
+         /(\d{1,3}(?:,\d{3})+)\s*USD/i,  // Match "9,564 USD" (thousands)
+         /(\d+)\s*USD/i  // Match simple integers
        ];
        
        for (const pattern of pricePatterns) {
@@ -222,25 +217,28 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
          if (priceMatch) {
            let matchedPrice = priceMatch[1];
            
-           // Traiter le prix matché de la même façon
-           const commaCount = (matchedPrice.match(/,/g) || []).length;
-           const dotCount = (matchedPrice.match(/\./g) || []).length;
-           
-           if (commaCount > 0 && dotCount === 0) {
-             // Si on a "9,564" c'est probablement un séparateur de milliers
-             if (matchedPrice.split(',')[1]?.length > 2) {
-               matchedPrice = matchedPrice.replace(/,/g, '');
-             } else {
-               matchedPrice = matchedPrice.replace(',', '.');
-             }
-           } else if (commaCount > 0 && dotCount > 0) {
-             // Format mixte - garder le dernier séparateur pour les décimales
-             if (matchedPrice.lastIndexOf('.') > matchedPrice.lastIndexOf(',')) {
+           // Apply same processing logic as above
+           if (matchedPrice.includes(',') && matchedPrice.includes('.')) {
+             const lastDotIndex = matchedPrice.lastIndexOf('.');
+             const lastCommaIndex = matchedPrice.lastIndexOf(',');
+             
+             if (lastDotIndex > lastCommaIndex) {
                matchedPrice = matchedPrice.replace(/,/g, '');
              } else {
                matchedPrice = matchedPrice.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
              }
-           }
+                       } else if (matchedPrice.includes(',') && !matchedPrice.includes('.')) {
+              const parts = matchedPrice.split(',');
+              if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
+                // Likely thousand separator (like "7,287")
+                matchedPrice = matchedPrice.replace(/,/g, '');
+              } else if (parts.length === 2 && parts[1].length <= 4) {
+                // Likely decimal separator (like "12,34")
+                matchedPrice = matchedPrice.replace(',', '.');
+              } else {
+                matchedPrice = matchedPrice.replace(/,/g, '');
+              }
+            }
            
            price = parseFloat(matchedPrice) || 0;
            if (price > 0) {
@@ -251,7 +249,7 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
        }
      }
     
-         // Extraire les variations
+         // Extract changes
      const changeSelectors = [
        '.tv-symbol-price-quote__change',
        '[data-field="change"]',
@@ -265,47 +263,52 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
          const rawChangeText = changeElement.text.trim();
          console.log(`Raw change text for ${symbol}: "${rawChangeText}"`);
          
-         // Fonction pour parser un nombre avec séparateurs
+         // Function to parse a number with separators
          const parseNumber = (numStr: string): number => {
            if (!numStr) return 0;
            
-           // Préserver le signe
+           // Preserve sign
            const isNegative = numStr.startsWith('-') || numStr.startsWith('−');
            const isPositive = numStr.startsWith('+');
            
-           // Enlever les signes et espaces
+           // Remove signs and spaces
            let cleanNum = numStr.replace(/^[+-−]\s*/, '');
            
-           // Gérer les séparateurs de milliers
-           const commaCount = (cleanNum.match(/,/g) || []).length;
-           const dotCount = (cleanNum.match(/\./g) || []).length;
-           
-           if (commaCount === 1 && dotCount === 0) {
-             const parts = cleanNum.split(',');
-             if (parts[1] && parts[1].length > 2) {
-               // Séparateur de milliers
-               cleanNum = cleanNum.replace(',', '');
+           // Apply same logic as price parsing
+           if (cleanNum.includes(',') && cleanNum.includes('.')) {
+             const lastDotIndex = cleanNum.lastIndexOf('.');
+             const lastCommaIndex = cleanNum.lastIndexOf(',');
+             
+             if (lastDotIndex > lastCommaIndex) {
+               cleanNum = cleanNum.replace(/,/g, '');
              } else {
-               // Séparateur décimal
-               cleanNum = cleanNum.replace(',', '.');
+               cleanNum = cleanNum.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
              }
-           } else if (commaCount > 0) {
-             // Multiple virgules = séparateurs de milliers
-             cleanNum = cleanNum.replace(/,/g, '');
-           }
+                       } else if (cleanNum.includes(',') && !cleanNum.includes('.')) {
+              const parts = cleanNum.split(',');
+              if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
+                // Likely thousand separator (like "7,287")
+                cleanNum = cleanNum.replace(/,/g, '');
+              } else if (parts.length === 2 && parts[1].length <= 4) {
+                // Likely decimal separator (like "12,34")
+                cleanNum = cleanNum.replace(',', '.');
+              } else {
+                cleanNum = cleanNum.replace(/,/g, '');
+              }
+            }
            
            const result = parseFloat(cleanNum) || 0;
            return isNegative ? -result : result;
          };
          
-         // Extraire la variation absolue (sans %)
+         // Extract absolute change (without %)
          const absoluteMatch = rawChangeText.match(/([+-−]?\s*\d+(?:[,\.]\d+)*)\s*(?!\%)/);
          if (absoluteMatch) {
            absoluteChange = parseNumber(absoluteMatch[1]);
            console.log(`Parsed absolute change for ${symbol}: ${absoluteChange}`);
          }
          
-         // Extraire la variation en pourcentage
+         // Extract percent change
          const percentMatch = rawChangeText.match(/([+-−]?\s*\d+(?:[,\.]\d+)*)\s*%/);
          if (percentMatch) {
            percentChange = parseNumber(percentMatch[1]);
@@ -316,9 +319,9 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
        }
      }
      
-     // Extraire depuis le contenu HTML si pas trouvé
+     // Extract from HTML content if not found
      if (percentChange === 0 && absoluteChange === 0) {
-       // Chercher des patterns comme "+0.6966 +2.10%" ou "0 0.00%"
+       // Search for patterns like "+0.6966 +2.10%" or "0 0.00%"
        const changePatterns = [
          /([+-]?\s*\d+(?:[,\.]\d+)*)\s*([+-]?\s*\d+(?:[,\.]\d+)*)%/,
          /([+-]?\s*\d+(?:[,\.]\d+)*)\s*USD.*?([+-]?\s*\d+(?:[,\.]\d+)*)%/i,
@@ -354,13 +357,13 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
     
     console.log(`Parsed ${symbol}: price=${price}, change=${absoluteChange}, percent=${percentChange}`);
     
-         // Retourner null si aucune données valide
+         // Return null if no valid data
      if (price === 0) {
        console.warn(`No valid price found for ${symbol}`);
        return null;
      }
      
-     // Si aucune variation n'est trouvée, défaut à 0 (comme sur TradingView)
+     // If no change found, default to 0 (like on TradingView)
      if (isNaN(percentChange)) percentChange = 0;
      if (isNaN(absoluteChange)) absoluteChange = 0;
     
@@ -370,7 +373,7 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
        price,
        percentChange,
        absoluteChange,
-       high: 0, // Pour freight, pas besoin de high/low
+       high: 0, // For freight, no need for high/low
        low: 0,
        technicalEvaluation: 'Neutral',
        type,
@@ -384,12 +387,12 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
 }
 
 /**
- * Récupère toutes les données freight en parallèle
+ * Retrieves all freight data in parallel
  */
 async function fetchFreightData(): Promise<Commodity[]> {
   console.log('Fetching freight data from individual symbol pages...');
   
-  // Limiter à 10 symboles en parallèle pour éviter la surcharge de l'API
+  // Limit to 10 symbols in parallel to avoid API overload
   const batchSize = 5;
   const results: Commodity[] = [];
   
@@ -410,7 +413,7 @@ async function fetchFreightData(): Promise<Commodity[]> {
       }
     });
     
-    // Petit délai entre les batches pour respecter les limites de l'API
+    // Small delay between batches to respect API limits
     if (i + batchSize < FREIGHT_SYMBOLS.length) {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
@@ -503,7 +506,7 @@ async function fetchBunkerData(): Promise<Commodity[]> {
 }
 
 /**
- * Parse bunker prices data from Ship & Bunker HTML
+ * Parses bunker prices data from Ship & Bunker HTML
  */
 function parseBunkerData(htmlContent: string, bunkerType: 'vlsfo' | 'mgo' | 'ifo380', bunkerTypeName: string): Commodity[] {
   try {
@@ -642,7 +645,7 @@ function parseBunkerData(htmlContent: string, bunkerType: 'vlsfo' | 'mgo' | 'ifo
 }
 
 /**
- * Extract commodity data from a table row
+ * Extracts commodity data from a table row
  */
 function extractBunkerCommodityFromRow(row: any, bunkerType: 'vlsfo' | 'mgo' | 'ifo380', bunkerTypeName: string, index: number): Commodity | null {
   try {
@@ -764,7 +767,7 @@ function extractBunkerCommodityFromRow(row: any, bunkerType: 'vlsfo' | 'mgo' | '
 }
 
 /**
- * Parse Gibraltar specific data from EMEA page
+ * Parses Gibraltar specific data from EMEA page
  */
 function parseGibraltarData(htmlContent: string): Commodity[] {
   try {
@@ -909,7 +912,7 @@ function parseGibraltarData(htmlContent: string): Commodity[] {
 }
 
 /**
- * Create a bunker commodity object
+ * Creates a bunker commodity object
  */
 function createBunkerCommodity(
   symbol: string,
@@ -943,17 +946,17 @@ export async function fetchCommoditiesData(category: CommodityCategory = 'metals
     // Show loading message
     console.log(`Fetching data for ${category} from TradingView...`);
     
-    // Gestion spéciale pour freight
+    // Special handling for freight
     if (category === 'freight') {
       return await fetchFreightData();
     }
     
-    // Gestion spéciale pour bunker
+    // Special handling for bunker
     if (category === 'bunker') {
       return await fetchBunkerData();
     }
     
-    // Pour les autres catégories, utiliser l'ancienne méthode
+    // For other categories, use the old method
     const url = `https://api.api-ninjas.com/v1/webscraper?url=https://www.tradingview.com/markets/futures/quotes-${category}/`;
     
     const response = await fetch(url, {
@@ -1156,53 +1159,175 @@ function parseCommoditiesData(data: any, category: CommodityCategory): Commodity
         
         // Extract other information
         console.log(`Row ${index}: Processing price from cell 1`);
-        const priceText = cells[1]?.text.trim().replace(/[^\d.,]/g, '').replace(',', '.');
+        let priceText = cells[1]?.text.trim();
+        
+        // Apply same price parsing logic as freight symbols
+        priceText = priceText.replace(/[^\d.,]/g, '');
+        
+        if (priceText.includes(',') && priceText.includes('.')) {
+          const lastDotIndex = priceText.lastIndexOf('.');
+          const lastCommaIndex = priceText.lastIndexOf(',');
+          
+          if (lastDotIndex > lastCommaIndex) {
+            priceText = priceText.replace(/,/g, '');
+          } else {
+            priceText = priceText.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
+          }
+                 } else if (priceText.includes(',') && !priceText.includes('.')) {
+           const parts = priceText.split(',');
+           if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
+             // Likely thousand separator (like "7,287")
+             priceText = priceText.replace(/,/g, '');
+           } else if (parts.length === 2 && parts[1].length <= 4) {
+             // Likely decimal separator (like "12,34")
+             priceText = priceText.replace(',', '.');
+           } else {
+             priceText = priceText.replace(/,/g, '');
+           }
+         }
+        
         const price = parseFloat(priceText) || 0;
         
         console.log(`Row ${index}: Processing percent change from cell 2`);
-        // Vérifier si la cellule contient une classe indiquant une baisse
+        // Check if the cell contains a class indicating a decrease
         const percentCell = cells[2];
         const isPercentNegative = percentCell.toString().includes('negative') || 
                                  percentCell.toString().includes('down') || 
                                  percentCell.toString().includes('red');
-        const percentChangeText = percentCell?.text.trim().replace(/[^-\d.,]/g, '').replace(',', '.');
+        let percentChangeText = percentCell?.text.trim().replace(/[^-\d.,]/g, '');
+        
+        // Apply same parsing logic for percent change
+        if (percentChangeText.includes(',') && percentChangeText.includes('.')) {
+          const lastDotIndex = percentChangeText.lastIndexOf('.');
+          const lastCommaIndex = percentChangeText.lastIndexOf(',');
+          
+          if (lastDotIndex > lastCommaIndex) {
+            percentChangeText = percentChangeText.replace(/,/g, '');
+          } else {
+            percentChangeText = percentChangeText.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
+          }
+                 } else if (percentChangeText.includes(',') && !percentChangeText.includes('.')) {
+           const parts = percentChangeText.split(',');
+           if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
+             // Likely thousand separator (like "7,287")
+             percentChangeText = percentChangeText.replace(/,/g, '');
+           } else if (parts.length === 2 && parts[1].length <= 4) {
+             // Likely decimal separator (like "12,34")
+             percentChangeText = percentChangeText.replace(',', '.');
+           } else {
+             percentChangeText = percentChangeText.replace(/,/g, '');
+           }
+         }
+        
         let percentChange = parseFloat(percentChangeText) || 0;
-        // Afficher des informations de débogage
+        // Display debug information
         console.log(`Row ${index}: Percent change raw text: "${percentChangeText}", parsed: ${percentChange}`);
         console.log(`Row ${index}: Percent cell classes: ${percentCell.toString().substring(0, 100)}`);
         console.log(`Row ${index}: Is percent negative based on class? ${isPercentNegative}`);
         
-        // Si le texte n'a pas de signe négatif mais la classe indique une valeur négative
+        // If the text does not have a negative sign but the class indicates a negative value
         if (isPercentNegative && percentChange > 0) {
           percentChange = -percentChange;
           console.log(`Row ${index}: Inverting percent change to ${percentChange}`);
         }
         
         console.log(`Row ${index}: Processing absolute change from cell 3`);
-        // Vérifier si la cellule contient une classe indiquant une baisse
+        // Check if the cell contains a class indicating a decrease
         const changeCell = cells[3];
         const isChangeNegative = changeCell.toString().includes('negative') || 
                                changeCell.toString().includes('down') || 
                                changeCell.toString().includes('red');
-        const absoluteChangeText = changeCell?.text.trim().replace(/[^-\d.,]/g, '').replace(',', '.');
+        let absoluteChangeText = changeCell?.text.trim().replace(/[^-\d.,]/g, '');
+        
+        // Apply same parsing logic for absolute change
+        if (absoluteChangeText.includes(',') && absoluteChangeText.includes('.')) {
+          const lastDotIndex = absoluteChangeText.lastIndexOf('.');
+          const lastCommaIndex = absoluteChangeText.lastIndexOf(',');
+          
+          if (lastDotIndex > lastCommaIndex) {
+            absoluteChangeText = absoluteChangeText.replace(/,/g, '');
+          } else {
+            absoluteChangeText = absoluteChangeText.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
+          }
+                 } else if (absoluteChangeText.includes(',') && !absoluteChangeText.includes('.')) {
+           const parts = absoluteChangeText.split(',');
+           if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
+             // Likely thousand separator (like "7,287")
+             absoluteChangeText = absoluteChangeText.replace(/,/g, '');
+           } else if (parts.length === 2 && parts[1].length <= 4) {
+             // Likely decimal separator (like "12,34")
+             absoluteChangeText = absoluteChangeText.replace(',', '.');
+           } else {
+             absoluteChangeText = absoluteChangeText.replace(/,/g, '');
+           }
+         }
+        
         let absoluteChange = parseFloat(absoluteChangeText) || 0;
-        // Afficher des informations de débogage
+        // Display debug information
         console.log(`Row ${index}: Absolute change raw text: "${absoluteChangeText}", parsed: ${absoluteChange}`);
         console.log(`Row ${index}: Change cell classes: ${changeCell.toString().substring(0, 100)}`);
         console.log(`Row ${index}: Is change negative based on class? ${isChangeNegative}`);
         
-        // Si le texte n'a pas de signe négatif mais la classe indique une valeur négative
+        // If the text does not have a negative sign but the class indicates a negative value
         if (isChangeNegative && absoluteChange > 0) {
           absoluteChange = -absoluteChange;
           console.log(`Row ${index}: Inverting absolute change to ${absoluteChange}`);
         }
         
         console.log(`Row ${index}: Processing high from cell 4`);
-        const highText = cells[4]?.text.trim().replace(/[^\d.,]/g, '').replace(',', '.');
+        let highText = cells[4]?.text.trim().replace(/[^\d.,]/g, '');
+        
+        // Apply same parsing logic for high
+        if (highText.includes(',') && highText.includes('.')) {
+          const lastDotIndex = highText.lastIndexOf('.');
+          const lastCommaIndex = highText.lastIndexOf(',');
+          
+          if (lastDotIndex > lastCommaIndex) {
+            highText = highText.replace(/,/g, '');
+          } else {
+            highText = highText.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
+          }
+                 } else if (highText.includes(',') && !highText.includes('.')) {
+           const parts = highText.split(',');
+           if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
+             // Likely thousand separator (like "7,287")
+             highText = highText.replace(/,/g, '');
+           } else if (parts.length === 2 && parts[1].length <= 4) {
+             // Likely decimal separator (like "12,34")
+             highText = highText.replace(',', '.');
+           } else {
+             highText = highText.replace(/,/g, '');
+           }
+         }
+        
         const high = parseFloat(highText) || 0;
         
         console.log(`Row ${index}: Processing low from cell 5`);
-        const lowText = cells[5]?.text.trim().replace(/[^\d.,]/g, '').replace(',', '.');
+        let lowText = cells[5]?.text.trim().replace(/[^\d.,]/g, '');
+        
+        // Apply same parsing logic for low
+        if (lowText.includes(',') && lowText.includes('.')) {
+          const lastDotIndex = lowText.lastIndexOf('.');
+          const lastCommaIndex = lowText.lastIndexOf(',');
+          
+          if (lastDotIndex > lastCommaIndex) {
+            lowText = lowText.replace(/,/g, '');
+          } else {
+            lowText = lowText.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
+          }
+                 } else if (lowText.includes(',') && !lowText.includes('.')) {
+           const parts = lowText.split(',');
+           if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
+             // Likely thousand separator (like "7,287")
+             lowText = lowText.replace(/,/g, '');
+           } else if (parts.length === 2 && parts[1].length <= 4) {
+             // Likely decimal separator (like "12,34")
+             lowText = lowText.replace(',', '.');
+           } else {
+             lowText = lowText.replace(/,/g, '');
+           }
+         }
+        
         const low = parseFloat(lowText) || 0;
         
         // Technical evaluation (if available)

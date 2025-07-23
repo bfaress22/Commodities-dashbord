@@ -969,7 +969,7 @@ export default function CommoditiesDashboard() {
             <div>
               <h2 className="text-2xl font-bold">Bunker Prices</h2>
               <p className="text-muted-foreground">
-                Prix des carburants marins en temps réel depuis Ship & Bunker
+                Real-Time Marine Fuel Prices from Ship & Bunker
               </p>
             </div>
             
@@ -1109,8 +1109,8 @@ export default function CommoditiesDashboard() {
               <h2 className="text-2xl font-bold">Your Favorites</h2>
               <p className="text-muted-foreground">
                 {favoritesCount > 0 
-                  ? `Vous suivez ${favoritesCount} commodité${favoritesCount === 1 ? '' : 's'}`
-                  : "Aucun favori ajouté pour le moment"
+                  ? `You are following ${favoritesCount} commodit${favoritesCount === 1 ? '' : 's'}`
+                  : "No favorites added yet"
                 }
               </p>
             </div>
@@ -1132,18 +1132,18 @@ export default function CommoditiesDashboard() {
               <div className="text-center space-y-4">
                 <Heart className="mx-auto h-16 w-16 text-muted-foreground" />
                 <div className="space-y-2">
-                  <h3 className="text-xl font-semibold">Créer votre liste de suivi</h3>
+                  <h3 className="text-xl font-semibold">Create your watchlist</h3>
                   <p className="text-muted-foreground max-w-md mx-auto">
-                    Ajoutez des commodités à vos favoris en cliquant sur l'étoile ⭐ dans n'importe quel tableau ou carte. 
-                    Cela vous aidera à suivre rapidement les symboles qui vous intéressent le plus.
+                  Add commodities to your favorites by clicking the ⭐ icon on any table or card.
+                  This helps you quickly keep track of the symbols you care about most.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2 justify-center mt-6">
                   {[
-                    { key: 'metals', label: 'Parcourir Métaux' },
-                    { key: 'agricultural', label: 'Parcourir Agriculture' },
-                    { key: 'energy', label: 'Parcourir Énergie' },
-                    { key: 'freight', label: 'Parcourir Fret' }
+                    { key: 'metals', label: 'Browse Metals' },
+                    { key: 'agricultural', label: 'Browse Agriculture' },
+                    { key: 'energy', label: 'Browse Energy' },
+                    { key: 'freight', label: 'Browse Freight' }
                   ].map(({ key, label }) => (
                     <Button
                       key={key}
