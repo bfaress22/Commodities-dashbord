@@ -19,6 +19,7 @@ export interface WorldBankData {
   commodities: WorldBankCommodity[];
   lastUpdated: Date;
   fileName?: string;
+  isDefault?: boolean;
 }
 
 // Catégories de commodités World Bank
@@ -191,84 +192,91 @@ let cachedData: WorldBankData | null = null;
 let lastFetchTime: number = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-export async function importWorldBankPinkSheet(file: File): Promise<WorldBankData> {
-  try {
-    const arrayBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+// Fonction pour parser les données Excel
+function parseExcelData(arrayBuffer: ArrayBuffer): WorldBankCommodity[] {
+  const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+  
+  // Look for the Monthly Prices sheet
+  const sheetNames = workbook.SheetNames;
+  const monthlySheetName = sheetNames.find(name => 
+    name.toLowerCase().includes('monthly') && name.toLowerCase().includes('price')
+  ) || 'Monthly Prices';
+  
+  const monthlySheet = workbook.Sheets[monthlySheetName];
+  if (!monthlySheet) {
+    throw new Error('Monthly Prices sheet not found in the file');
+  }
+  
+  const data = XLSX.utils.sheet_to_json(monthlySheet, { header: 1 }) as any[][];
+  
+  if (data.length < 4) {
+    throw new Error('Invalid file format: insufficient data rows');
+  }
+  
+  const commodities: WorldBankCommodity[] = [];
+  
+  // Parse headers (row 0: names, row 1: units, row 2: symbols)
+  const names = data[0] || [];
+  const units = data[1] || [];
+  const symbols = data[2] || [];
+  
+  // Process each commodity column (starting from index 1 to skip date column)
+  for (let i = 1; i < names.length; i++) {
+    const name = names[i];
+    const unit = units[i];
+    const symbol = symbols[i];
     
-    // Look for the Monthly Prices sheet
-    const sheetNames = workbook.SheetNames;
-    const monthlySheetName = sheetNames.find(name => 
-      name.toLowerCase().includes('monthly') && name.toLowerCase().includes('price')
-    ) || 'Monthly Prices';
+    if (!name || !symbol) continue;
     
-    const monthlySheet = workbook.Sheets[monthlySheetName];
-    if (!monthlySheet) {
-      throw new Error('Monthly Prices sheet not found in the file');
-    }
+    const category = COMMODITY_CATEGORIES[symbol] || WORLD_BANK_CATEGORIES.OTHER;
+    const displayName = COMMODITY_DISPLAY_NAMES[symbol] || name;
     
-    const data = XLSX.utils.sheet_to_json(monthlySheet, { header: 1 }) as any[][];
+    // Extract time series data
+    const timeSeriesData: { date: string; value: number }[] = [];
     
-    if (data.length < 4) {
-      throw new Error('Invalid file format: insufficient data rows');
-    }
-    
-    const commodities: WorldBankCommodity[] = [];
-    
-    // Parse headers (row 0: names, row 1: units, row 2: symbols)
-    const names = data[0] || [];
-    const units = data[1] || [];
-    const symbols = data[2] || [];
-    
-    // Process each commodity column (starting from index 1 to skip date column)
-    for (let i = 1; i < names.length; i++) {
-      const name = names[i];
-      const unit = units[i];
-      const symbol = symbols[i];
+    for (let j = 3; j < data.length; j++) {
+      const row = data[j];
+      if (!row || row.length <= i) continue;
       
-      if (!name || !symbol) continue;
+      const date = row[0];
+      const value = row[i];
       
-      const category = COMMODITY_CATEGORIES[symbol] || WORLD_BANK_CATEGORIES.OTHER;
-      const displayName = COMMODITY_DISPLAY_NAMES[symbol] || name;
-      
-      // Extract time series data
-      const timeSeriesData: { date: string; value: number }[] = [];
-      
-      for (let j = 3; j < data.length; j++) {
-        const row = data[j];
-        if (!row || row.length <= i) continue;
-        
-        const date = row[0];
-        const value = row[i];
-        
-        if (date && typeof value === 'number' && !isNaN(value)) {
-          timeSeriesData.push({
-            date: date.toString(),
-            value: value
-          });
-        }
-      }
-      
-      if (timeSeriesData.length > 0) {
-        const currentValue = timeSeriesData[timeSeriesData.length - 1]?.value;
-        const previousValue = timeSeriesData[timeSeriesData.length - 2]?.value;
-        
-        const change = currentValue && previousValue ? currentValue - previousValue : undefined;
-        const changePercent = currentValue && previousValue ? ((change! / previousValue) * 100) : undefined;
-        
-        commodities.push({
-          id: symbol,
-          name: displayName,
-          unit: unit || '',
-          symbol: symbol,
-          category,
-          data: timeSeriesData,
-          currentValue,
-          change,
-          changePercent
+      if (date && typeof value === 'number' && !isNaN(value)) {
+        timeSeriesData.push({
+          date: date.toString(),
+          value: value
         });
       }
     }
+    
+    if (timeSeriesData.length > 0) {
+      const currentValue = timeSeriesData[timeSeriesData.length - 1]?.value;
+      const previousValue = timeSeriesData[timeSeriesData.length - 2]?.value;
+      
+      const change = currentValue && previousValue ? currentValue - previousValue : undefined;
+      const changePercent = currentValue && previousValue ? ((change! / previousValue) * 100) : undefined;
+      
+      commodities.push({
+        id: symbol,
+        name: displayName,
+        unit: unit || '',
+        symbol: symbol,
+        category,
+        data: timeSeriesData,
+        currentValue,
+        change,
+        changePercent
+      });
+    }
+  }
+  
+  return commodities;
+}
+
+export async function importWorldBankPinkSheet(file: File): Promise<WorldBankData> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const commodities = parseExcelData(arrayBuffer);
     
     if (commodities.length === 0) {
       throw new Error('No valid commodity data found in the file');
@@ -277,7 +285,8 @@ export async function importWorldBankPinkSheet(file: File): Promise<WorldBankDat
     const result: WorldBankData = {
       commodities,
       lastUpdated: new Date(),
-      fileName: file.name
+      fileName: file.name,
+      isDefault: false
     };
     
     // Cache the result
@@ -293,17 +302,50 @@ export async function importWorldBankPinkSheet(file: File): Promise<WorldBankDat
 }
 
 export async function fetchWorldBankData(): Promise<WorldBankData> {
-  if (!cachedData) {
-    throw new Error('No World Bank data available. Please import a Pink Sheet file first.');
-  }
-  
   const now = Date.now();
-  if ((now - lastFetchTime) < CACHE_DURATION) {
+  
+  // Return cached data if still valid
+  if (cachedData && (now - lastFetchTime) < CACHE_DURATION) {
     return cachedData;
   }
-  
-  // Return cached data even if expired
-  return cachedData;
+
+  try {
+    // Load default data from public directory
+    const response = await fetch('/CMO-Historical-Data-Monthly (1).xlsx');
+    if (!response.ok) {
+      throw new Error('Failed to fetch default World Bank data');
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const commodities = parseExcelData(arrayBuffer);
+    
+    if (commodities.length === 0) {
+      throw new Error('No valid commodity data found in default file');
+    }
+    
+    const result: WorldBankData = {
+      commodities,
+      lastUpdated: new Date(),
+      fileName: 'CMO-Historical-Data-Monthly (1).xlsx',
+      isDefault: true
+    };
+    
+    // Cache the result
+    cachedData = result;
+    lastFetchTime = now;
+    
+    return result;
+    
+  } catch (error) {
+    console.error('Error fetching World Bank data:', error);
+    
+    // Return cached data if available, even if expired
+    if (cachedData) {
+      return cachedData;
+    }
+    
+    throw new Error('Failed to fetch World Bank commodity data');
+  }
 }
 
 export async function fetchWorldBankDataByCategory(category: string): Promise<WorldBankCommodity[]> {

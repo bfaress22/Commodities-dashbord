@@ -70,7 +70,7 @@ export default function WorldBankFileImport({ onDataImported }: WorldBankFileImp
 
   const handleClearData = () => {
     clearWorldBankData();
-    toast.success('World Bank data cleared');
+    toast.success('Custom data cleared, loading default data');
     onDataImported();
   };
 
@@ -119,24 +119,38 @@ export default function WorldBankFileImport({ onDataImported }: WorldBankFileImp
       <CardContent className="space-y-6">
         {/* Current Data Status */}
         {currentData && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className={`border rounded-lg p-4 ${
+            currentData.isDefault 
+              ? 'bg-blue-50 border-blue-200' 
+              : 'bg-green-50 border-green-200'
+          }`}>
             <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <span className="text-sm font-medium text-green-800">Data Loaded</span>
+              <CheckCircle className={`h-4 w-4 ${
+                currentData.isDefault ? 'text-blue-600' : 'text-green-600'
+              }`} />
+              <span className={`text-sm font-medium ${
+                currentData.isDefault ? 'text-blue-800' : 'text-green-800'
+              }`}>
+                {currentData.isDefault ? 'Default Data Loaded' : 'Custom Data Loaded'}
+              </span>
             </div>
-            <div className="text-sm text-green-700 space-y-1">
-              <p><strong>File:</strong> {currentData.fileName}</p>
+            <div className={`text-sm space-y-1 ${
+              currentData.isDefault ? 'text-blue-700' : 'text-green-700'
+            }`}>
+              <p><strong>Source:</strong> {currentData.isDefault ? 'Default World Bank Data' : currentData.fileName}</p>
               <p><strong>Commodities:</strong> {currentData.commodities.length}</p>
               <p><strong>Last Updated:</strong> {currentData.lastUpdated.toLocaleString()}</p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleClearData}
-              className="mt-3 text-red-600 border-red-200 hover:bg-red-50"
-            >
-              Clear Data
-            </Button>
+            {!currentData.isDefault && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleClearData}
+                className="mt-3 text-red-600 border-red-200 hover:bg-red-50"
+              >
+                Clear Custom Data
+              </Button>
+            )}
           </div>
         )}
 

@@ -21,22 +21,16 @@ import WorldBankFileImport from './WorldBankFileImport';
 
 export default function WorldBankDashboard() {
   const [commodities, setCommodities] = useState<WorldBankCommodity[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [showImport, setShowImport] = useState(!hasWorldBankData());
+  const [showImport, setShowImport] = useState(false);
+  const [currentData, setCurrentData] = useState(getCurrentWorldBankData());
 
   const categories = getWorldBankCategories();
 
   const loadData = async () => {
-    if (!hasWorldBankData()) {
-      setError('No World Bank data available. Please import a Pink Sheet file first.');
-      setCommodities([]);
-      setLastUpdated(null);
-      return;
-    }
-
     setLoading(true);
     setError(null);
     
@@ -44,6 +38,7 @@ export default function WorldBankDashboard() {
       const data = await fetchWorldBankData();
       setCommodities(data.commodities);
       setLastUpdated(data.lastUpdated);
+      setCurrentData(data);
       
       if (data.commodities.length === 0) {
         setError("No data found");
@@ -53,6 +48,7 @@ export default function WorldBankDashboard() {
       setError('Failed to load World Bank commodity data. Please try again later.');
       setCommodities([]);
       setLastUpdated(null);
+      setCurrentData(null);
     } finally {
       setLoading(false);
     }
@@ -64,9 +60,7 @@ export default function WorldBankDashboard() {
   };
 
   useEffect(() => {
-    if (hasWorldBankData()) {
-      loadData();
-    }
+    loadData();
   }, []);
 
   const getFilteredCommodities = () => {
@@ -128,9 +122,16 @@ export default function WorldBankDashboard() {
         
         <div className="flex items-center gap-2">
           {lastUpdated && (
-            <p className="text-sm text-muted-foreground whitespace-nowrap">
-              Last updated: {lastUpdated.toLocaleTimeString()}
-            </p>
+            <div className="text-sm text-muted-foreground">
+              <p className="whitespace-nowrap">
+                Last updated: {lastUpdated.toLocaleTimeString()}
+              </p>
+              {currentData && (
+                <p className="text-xs">
+                  {currentData.isDefault ? 'Default data' : `Custom: ${currentData.fileName}`}
+                </p>
+              )}
+            </div>
           )}
           <Button
             variant="outline"
@@ -138,19 +139,17 @@ export default function WorldBankDashboard() {
             onClick={() => setShowImport(true)}
           >
             <Upload size={16} className="mr-2" />
-            Import File
+            Import New Data
           </Button>
-          {hasWorldBankData() && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadData}
-              disabled={loading}
-            >
-              <RefreshCw size={16} className={loading ? "animate-spin mr-2" : "mr-2"} />
-              Refresh
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadData}
+            disabled={loading}
+          >
+            <RefreshCw size={16} className={loading ? "animate-spin mr-2" : "mr-2"} />
+            Refresh
+          </Button>
         </div>
       </div>
 
