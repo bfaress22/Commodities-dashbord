@@ -5,8 +5,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CommoditiesTable from "./CommoditiesTable";
 import CommodityCard from "./CommodityCard";
 import SearchBar from "./SearchBar";
+import WorldBankDashboard from "./WorldBankDashboard";
 import { useFavorites } from "@/hooks/useFavorites";
-import { AlertCircle, RefreshCw, Droplet, Wheat, Factory, Ship, Heart, Fuel } from "lucide-react";
+import { AlertCircle, RefreshCw, Droplet, Wheat, Factory, Ship, Heart, Fuel, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,7 +35,7 @@ export default function CommoditiesDashboard() {
   const [lastUpdated, setLastUpdated] = useState<{[key in CommodityCategory]?: Date | null}>({});
 
   // État pour la catégorie active
-  const [activeCategory, setActiveCategory] = useState<CommodityCategory | 'favorites'>('metals');
+  const [activeCategory, setActiveCategory] = useState<CommodityCategory | 'favorites' | 'worldbank'>('metals');
 
   // Charger les données pour une catégorie spécifique
   const loadCategoryData = async (category: CommodityCategory) => {
@@ -121,6 +122,8 @@ export default function CommoditiesDashboard() {
         return bunkerCommodities;
       case 'favorites':
         return favoriteCommodities;
+      case 'worldbank':
+        return []; // World Bank data is handled separately
       default:
         return metalsCommodities;
     }
@@ -164,6 +167,17 @@ export default function CommoditiesDashboard() {
       loadAllData();
     }
   }, [activeCategory, allCommodities.length]);
+
+  // Handle loading for different categories
+  const handleCategoryChange = (category: string) => {
+    if (category === 'worldbank') {
+      setActiveCategory('worldbank');
+    } else if (category === 'favorites') {
+      setActiveCategory('favorites');
+    } else {
+      setActiveCategory(category as CommodityCategory);
+    }
+  };
 
   // Gérer la sélection d'une commodité depuis la recherche
   const handleSelectCommodity = (commodity: Commodity) => {
@@ -295,9 +309,9 @@ export default function CommoditiesDashboard() {
         defaultValue="metals" 
         className="space-y-4"
         value={activeCategory}
-        onValueChange={(value) => setActiveCategory(value as CommodityCategory | 'favorites')}
+        onValueChange={handleCategoryChange}
       >
-        <TabsList className="grid grid-cols-6 w-full md:w-[720px]">
+        <TabsList className="grid grid-cols-7 w-full md:w-[840px]">
           <TabsTrigger value="favorites" className="flex items-center gap-2">
             <Heart size={16} />
             <span className="hidden sm:inline">Favorites</span>
@@ -327,6 +341,10 @@ export default function CommoditiesDashboard() {
           <TabsTrigger value="bunker" className="flex items-center gap-2">
             <Fuel size={16} />
             <span>Bunker</span>
+          </TabsTrigger>
+          <TabsTrigger value="worldbank" className="flex items-center gap-2">
+            <Building2 size={16} />
+            <span>World Bank</span>
           </TabsTrigger>
         </TabsList>
         
@@ -1178,6 +1196,11 @@ export default function CommoditiesDashboard() {
               )}
             </>
           )}
+        </TabsContent>
+
+        {/* World Bank Tab */}
+        <TabsContent value="worldbank" className="space-y-4">
+          <WorldBankDashboard />
         </TabsContent>
       </Tabs>
     </div>
