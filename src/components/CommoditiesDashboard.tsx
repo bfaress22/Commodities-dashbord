@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { Commodity, fetchCommoditiesData, CommodityCategory } from "@/services/api";
+import { Commodity, fetchCommoditiesData, refreshCommoditiesData, CommodityCategory } from "@/services/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CommoditiesTable from "./CommoditiesTable";
@@ -7,7 +7,7 @@ import CommodityCard from "./CommodityCard";
 import SearchBar from "./SearchBar";
 import WorldBankDashboard from "./WorldBankDashboard";
 import { useFavorites } from "@/hooks/useFavorites";
-import { AlertCircle, RefreshCw, Droplet, Wheat, Factory, Ship, Heart, Fuel, Building2 } from "lucide-react";
+import { AlertCircle, RefreshCw, Droplet, Wheat, Factory, Ship, Heart, Fuel, Building2, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,12 +38,14 @@ export default function CommoditiesDashboard() {
   const [activeCategory, setActiveCategory] = useState<CommodityCategory | 'favorites' | 'worldbank'>('metals');
 
   // Charger les données pour une catégorie spécifique
-  const loadCategoryData = async (category: CommodityCategory) => {
+  const loadCategoryData = async (category: CommodityCategory, forceRefresh: boolean = false) => {
     setLoading(prev => ({ ...prev, [category]: true }));
     setError(prev => ({ ...prev, [category]: null }));
     
     try {
-      const data = await fetchCommoditiesData(category);
+      const data = forceRefresh 
+        ? await refreshCommoditiesData(category)
+        : await fetchCommoditiesData(category);
       
       // Mettre à jour l'état approprié selon la catégorie
       if (category === 'metals') {
@@ -85,13 +87,13 @@ export default function CommoditiesDashboard() {
   };
 
   // Charger toutes les données
-  const loadAllData = async () => {
+  const loadAllData = async (forceRefresh: boolean = false) => {
     await Promise.all([
-      loadCategoryData('metals'),
-      loadCategoryData('agricultural'),
-      loadCategoryData('energy'),
-      loadCategoryData('freight'),
-      loadCategoryData('bunker')
+      loadCategoryData('metals', forceRefresh),
+      loadCategoryData('agricultural', forceRefresh),
+      loadCategoryData('energy', forceRefresh),
+      loadCategoryData('freight', forceRefresh),
+      loadCategoryData('bunker', forceRefresh)
     ]);
   };
 
@@ -259,35 +261,56 @@ export default function CommoditiesDashboard() {
   const currentLastUpdated = activeCategory === 'favorites' ? null : lastUpdated[activeCategory as CommodityCategory];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Commodities Dashboard</h1>
-            <p className="text-muted-foreground">
-              Track prices and trends of precious metals, agricultural products, and energy commodities
-            </p>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            {/* Barre de recherche */}
-            <SearchBar 
-              commodities={allCommodities}
-              onSelectCommodity={handleSelectCommodity}
-              placeholder="Search commodities..."
-            />
-            
-            <div className="flex items-center gap-2">
+    <div className="space-y-8">
+      {/* Enhanced Header */}
+      <div className="relative overflow-hidden">
+        {/* Background gradient */}
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/5 via-blue-900/5 to-indigo-900/5 rounded-2xl" />
+        
+        <div className="relative bg-white/80 backdrop-blur-sm border border-white/20 rounded-2xl p-8 shadow-xl">
+          <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-6">
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-gradient-to-br from-slate-900 to-slate-700 rounded-xl text-white shadow-lg">
+                  <BarChart3 className="h-6 w-6" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
+                    Commodities Dashboard
+                  </h1>
+                  <p className="text-slate-600 font-medium">
+                    Real-time tracking of global commodity markets and price trends
+                  </p>
+                </div>
+              </div>
+              
               {currentLastUpdated && (
-                <p className="text-sm text-muted-foreground whitespace-nowrap">
-                  Last updated: {currentLastUpdated.toLocaleTimeString()}
-                </p>
+                <div className="flex items-center gap-4">
+                  <div className="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                    Last Updated: {currentLastUpdated.toLocaleTimeString()}
+                  </div>
+                  <div className="text-sm text-slate-500">
+                    {allCommodities.length} commodities tracked
+                  </div>
+                </div>
               )}
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <SearchBar 
+                commodities={allCommodities}
+                onSelectCommodity={handleSelectCommodity}
+                placeholder="Search commodities..."
+              />
+              
               <Button
-                variant="outline"
-                size="sm"
-                            onClick={() => activeCategory !== 'favorites' && loadCategoryData(activeCategory)}
-            disabled={isLoading || activeCategory === 'favorites'}
+                onClick={() => {
+                  if (activeCategory !== 'favorites' && activeCategory !== 'worldbank') {
+                    loadCategoryData(activeCategory as CommodityCategory, true);
+                  }
+                }}
+                disabled={isLoading || activeCategory === 'favorites' || activeCategory === 'worldbank'}
+                className="bg-gradient-to-r from-slate-900 to-slate-700 hover:from-slate-800 hover:to-slate-600 text-white shadow-lg hover:shadow-xl transition-all duration-200"
               >
                 <RefreshCw size={16} className={isLoading ? "animate-spin mr-2" : "mr-2"} />
                 Refresh
@@ -304,49 +327,76 @@ export default function CommoditiesDashboard() {
         </div>
       )}
 
-      {/* Onglets principaux pour les catégories */}
-      <Tabs 
-        defaultValue="metals" 
-        className="space-y-4"
-        value={activeCategory}
-        onValueChange={handleCategoryChange}
-      >
-        <TabsList className="grid grid-cols-7 w-full md:w-[840px]">
-          <TabsTrigger value="favorites" className="flex items-center gap-2">
-            <Heart size={16} />
-            <span className="hidden sm:inline">Favorites</span>
-            <span className="sm:hidden">❤️</span>
-            {favoritesCount > 0 && (
-              <span className="ml-1 bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[18px] h-[18px] flex items-center justify-center">
-                {favoritesCount}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="metals" className="flex items-center gap-2">
-            <Factory size={16} />
-            <span>Metals</span>
-          </TabsTrigger>
-          <TabsTrigger value="agricultural" className="flex items-center gap-2">
-            <Wheat size={16} />
-            <span>Agricultural</span>
-          </TabsTrigger>
-          <TabsTrigger value="energy" className="flex items-center gap-2">
-            <Droplet size={16} />
-            <span>Energy</span>
-          </TabsTrigger>
-          <TabsTrigger value="freight" className="flex items-center gap-2">
-            <Ship size={16} />
-            <span>Freight</span>
-          </TabsTrigger>
-          <TabsTrigger value="bunker" className="flex items-center gap-2">
-            <Fuel size={16} />
-            <span>Bunker</span>
-          </TabsTrigger>
-          <TabsTrigger value="worldbank" className="flex items-center gap-2">
-            <Building2 size={16} />
-            <span>World Bank</span>
-          </TabsTrigger>
-        </TabsList>
+      {/* Enhanced Main Tabs */}
+      <Card className="border-0 shadow-xl bg-white/50 backdrop-blur-sm">
+        <CardContent className="p-0">
+          <Tabs 
+            defaultValue="metals" 
+            className="w-full"
+            value={activeCategory}
+            onValueChange={handleCategoryChange}
+          >
+            <div className="border-b border-slate-100 bg-slate-50/80 rounded-t-xl">
+              <TabsList className="h-auto p-2 bg-transparent w-full justify-start gap-2 overflow-x-auto">
+                <TabsTrigger 
+                  value="favorites" 
+                  className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-slate-200 rounded-lg px-4 py-3 font-medium transition-all duration-200 flex items-center gap-2"
+                >
+                  <Heart size={16} />
+                  <span className="hidden sm:inline">Favorites</span>
+                  <span className="sm:hidden">Fav</span>
+                  {favoritesCount > 0 && (
+                    <span className="ml-1 bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[18px] h-[18px] flex items-center justify-center">
+                      {favoritesCount}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="metals" 
+                  className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-slate-200 rounded-lg px-4 py-3 font-medium transition-all duration-200 flex items-center gap-2"
+                >
+                  <Factory size={16} />
+                  <span>Metals</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="agricultural" 
+                  className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-slate-200 rounded-lg px-4 py-3 font-medium transition-all duration-200 flex items-center gap-2"
+                >
+                  <Wheat size={16} />
+                  <span>Agricultural</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="energy" 
+                  className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-slate-200 rounded-lg px-4 py-3 font-medium transition-all duration-200 flex items-center gap-2"
+                >
+                  <Droplet size={16} />
+                  <span>Energy</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="freight" 
+                  className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-slate-200 rounded-lg px-4 py-3 font-medium transition-all duration-200 flex items-center gap-2"
+                >
+                  <Ship size={16} />
+                  <span>Freight</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="bunker" 
+                  className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-slate-200 rounded-lg px-4 py-3 font-medium transition-all duration-200 flex items-center gap-2"
+                >
+                  <Fuel size={16} />
+                  <span>Bunker</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="worldbank" 
+                  className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-slate-200 rounded-lg px-4 py-3 font-medium transition-all duration-200 flex items-center gap-2"
+                >
+                  <Building2 size={16} />
+                  <span>World Bank</span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            
+            <div className="p-6">
         
         {/* Contenu des onglets principaux */}
         <TabsContent value="metals" className="space-y-4">
@@ -995,7 +1045,7 @@ export default function CommoditiesDashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => loadCategoryData('bunker')}
+                onClick={() => loadCategoryData('bunker', true)}
                 disabled={loading.bunker}
               >
                 <RefreshCw size={16} className={loading.bunker ? "animate-spin mr-2" : "mr-2"} />
@@ -1120,14 +1170,14 @@ export default function CommoditiesDashboard() {
           </Tabs>
         </TabsContent>
         
-        {/* Favorites Tab */}
-        <TabsContent value="favorites" className="space-y-4">
+        {/* Enhanced Favorites Tab */}
+        <TabsContent value="favorites" className="space-y-6">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold">Your Favorites</h2>
-              <p className="text-muted-foreground">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-slate-900">Your Favorites</h2>
+              <p className="text-slate-600">
                 {favoritesCount > 0 
-                  ? `You are following ${favoritesCount} commodit${favoritesCount === 1 ? '' : 's'}`
+                  ? `You are tracking ${favoritesCount} commodit${favoritesCount === 1 ? 'y' : 'ies'}`
                   : "No favorites added yet"
                 }
               </p>
@@ -1135,45 +1185,50 @@ export default function CommoditiesDashboard() {
             
             {favoritesCount > 0 && (
               <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadAllData()}
+                onClick={() => loadAllData(true)}
+                className="bg-gradient-to-r from-slate-900 to-slate-700 hover:from-slate-800 hover:to-slate-600 text-white shadow-lg hover:shadow-xl transition-all duration-200"
               >
                 <RefreshCw size={16} className="mr-2" />
-                Actualiser
+                Refresh
               </Button>
             )}
           </div>
 
           {favoritesCount === 0 ? (
-            <Card className="p-8">
-              <div className="text-center space-y-4">
-                <Heart className="mx-auto h-16 w-16 text-muted-foreground" />
-                <div className="space-y-2">
-                  <h3 className="text-xl font-semibold">Create your watchlist</h3>
-                  <p className="text-muted-foreground max-w-md mx-auto">
-                  Add commodities to your favorites by clicking the ⭐ icon on any table or card.
-                  This helps you quickly keep track of the symbols you care about most.
-                  </p>
+            <Card className="border-0 shadow-xl bg-gradient-to-br from-slate-50 to-slate-100">
+              <CardContent className="p-12">
+                <div className="text-center space-y-6">
+                  <div className="mx-auto w-20 h-20 bg-gradient-to-br from-slate-200 to-slate-300 rounded-full flex items-center justify-center">
+                    <Heart className="h-10 w-10 text-slate-600" />
+                  </div>
+                  <div className="space-y-3">
+                    <h3 className="text-2xl font-bold text-slate-900">Create your watchlist</h3>
+                    <p className="text-slate-600 max-w-md mx-auto leading-relaxed">
+                      Add commodities to your favorites by clicking the star icon on any table or card.
+                      This helps you quickly keep track of the symbols you care about most.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-3 justify-center pt-4">
+                    {[
+                      { key: 'metals', label: 'Browse Metals', icon: Factory },
+                      { key: 'agricultural', label: 'Browse Agriculture', icon: Wheat },
+                      { key: 'energy', label: 'Browse Energy', icon: Droplet },
+                      { key: 'freight', label: 'Browse Freight', icon: Ship }
+                    ].map(({ key, label, icon: Icon }) => (
+                      <Button
+                        key={key}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setActiveCategory(key as CommodityCategory)}
+                        className="border-slate-200 hover:bg-white hover:shadow-sm transition-all duration-200"
+                      >
+                        <Icon size={16} className="mr-2" />
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2 justify-center mt-6">
-                  {[
-                    { key: 'metals', label: 'Browse Metals' },
-                    { key: 'agricultural', label: 'Browse Agriculture' },
-                    { key: 'energy', label: 'Browse Energy' },
-                    { key: 'freight', label: 'Browse Freight' }
-                  ].map(({ key, label }) => (
-                    <Button
-                      key={key}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setActiveCategory(key as CommodityCategory)}
-                    >
-                      {label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
+              </CardContent>
             </Card>
           ) : (
             <>
@@ -1188,8 +1243,8 @@ export default function CommoditiesDashboard() {
               </div>
 
               {favoriteCommodities.length > 8 && (
-                <div className="text-center pt-4">
-                  <p className="text-sm text-muted-foreground">
+                <div className="text-center pt-6">
+                  <p className="text-sm text-slate-500 bg-slate-50 px-4 py-2 rounded-lg inline-block">
                     Showing first 8 favorites in cards view. View all {favoritesCount} in the table above.
                   </p>
                 </div>
@@ -1202,7 +1257,10 @@ export default function CommoditiesDashboard() {
         <TabsContent value="worldbank" className="space-y-4">
           <WorldBankDashboard />
         </TabsContent>
-      </Tabs>
+            </div>
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 }

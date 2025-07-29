@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { 
   WorldBankCommodity, 
   fetchWorldBankData, 
+  refreshWorldBankData,
   fetchWorldBankDataByCategory,
   getWorldBankCategories,
   WORLD_BANK_CATEGORIES,
@@ -15,9 +16,9 @@ import {
   getCurrentWorldBankData
 } from '@/services/worldBankApi';
 import WorldBankTable from './WorldBankTable';
-import WorldBankCommodityCard from './WorldBankCommodityCard';
 import WorldBankChart from './WorldBankChart';
 import WorldBankFileImport from './WorldBankFileImport';
+import WorldBankHistoricalData from './WorldBankHistoricalData';
 
 export default function WorldBankDashboard() {
   const [commodities, setCommodities] = useState<WorldBankCommodity[]>([]);
@@ -30,12 +31,14 @@ export default function WorldBankDashboard() {
 
   const categories = getWorldBankCategories();
 
-  const loadData = async () => {
+  const loadData = async (forceRefresh: boolean = false) => {
     setLoading(true);
     setError(null);
     
     try {
-      const data = await fetchWorldBankData();
+      const data = forceRefresh 
+        ? await refreshWorldBankData()
+        : await fetchWorldBankData();
       setCommodities(data.commodities);
       setLastUpdated(data.lastUpdated);
       setCurrentData(data);
@@ -144,7 +147,7 @@ export default function WorldBankDashboard() {
           <Button
             variant="outline"
             size="sm"
-            onClick={loadData}
+            onClick={() => loadData(true)}
             disabled={loading}
           >
             <RefreshCw size={16} className={loading ? "animate-spin mr-2" : "mr-2"} />
@@ -194,7 +197,7 @@ export default function WorldBankDashboard() {
             <TabsList>
               <TabsTrigger value="charts">Interactive Chart</TabsTrigger>
               <TabsTrigger value="table">Data Table</TabsTrigger>
-              <TabsTrigger value="cards">Cards View</TabsTrigger>
+              <TabsTrigger value="historical">Historical Data</TabsTrigger>
             </TabsList>
             
             {/* Charts View */}
@@ -242,22 +245,12 @@ export default function WorldBankDashboard() {
               />
             </TabsContent>
 
-            {/* Cards View */}
-            <TabsContent value="cards" className="space-y-4">
-              {filteredCommodities.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No commodities found in this category.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {filteredCommodities.map(commodity => (
-                    <WorldBankCommodityCard 
-                      key={commodity.id} 
-                      commodity={commodity} 
-                    />
-                  ))}
-                </div>
-              )}
+            {/* Historical Data View */}
+            <TabsContent value="historical" className="space-y-4">
+              <WorldBankHistoricalData 
+                commodities={filteredCommodities} 
+                loading={loading}
+              />
             </TabsContent>
           </Tabs>
         </>

@@ -4,6 +4,117 @@ import { parse } from "node-html-parser";
 // API key variable that can be updated
 let API_KEY = 'EWzCURtf517KNAYxR3ODKA==5RzrjpG7MWHTd50w';
 
+// Cache interface
+interface CacheData {
+  data: any[];
+  timestamp: number;
+  lastUpdated: string;
+}
+
+// Cache storage
+const CACHE_PREFIX = 'commodities_cache_';
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+// Function to get cache key for a category
+function getCacheKey(category: CommodityCategory): string {
+  return `${CACHE_PREFIX}${category}`;
+}
+
+// Function to save data to localStorage
+function saveToCache(category: CommodityCategory, data: any[]): void {
+  try {
+    const cacheData: CacheData = {
+      data,
+      timestamp: Date.now(),
+      lastUpdated: new Date().toISOString()
+    };
+    localStorage.setItem(getCacheKey(category), JSON.stringify(cacheData));
+    console.log(`Data cached for ${category}: ${data.length} items`);
+  } catch (error) {
+    console.error(`Error saving cache for ${category}:`, error);
+  }
+}
+
+// Function to load data from localStorage
+function loadFromCache(category: CommodityCategory): any[] | null {
+  try {
+    const cached = localStorage.getItem(getCacheKey(category));
+    if (!cached) {
+      console.log(`No cache found for ${category}`);
+      return null;
+    }
+
+    const cacheData: CacheData = JSON.parse(cached);
+    const now = Date.now();
+    const isExpired = (now - cacheData.timestamp) > CACHE_DURATION;
+
+    if (isExpired) {
+      console.log(`Cache expired for ${category}, removing...`);
+      localStorage.removeItem(getCacheKey(category));
+      return null;
+    }
+
+    console.log(`Loading cached data for ${category}: ${cacheData.data.length} items (${Math.round((now - cacheData.timestamp) / (1000 * 60 * 60))} hours old)`);
+    return cacheData.data;
+  } catch (error) {
+    console.error(`Error loading cache for ${category}:`, error);
+    return null;
+  }
+}
+
+// Function to clear cache for a specific category
+export function clearCache(category: CommodityCategory): void {
+  try {
+    localStorage.removeItem(getCacheKey(category));
+    console.log(`Cache cleared for ${category}`);
+  } catch (error) {
+    console.error(`Error clearing cache for ${category}:`, error);
+  }
+}
+
+// Function to clear all cache
+export function clearAllCache(): void {
+  try {
+    const keys = Object.keys(localStorage);
+    keys.forEach(key => {
+      if (key.startsWith(CACHE_PREFIX)) {
+        localStorage.removeItem(key);
+      }
+    });
+    console.log('All cache cleared');
+  } catch (error) {
+    console.error('Error clearing all cache:', error);
+  }
+}
+
+// Function to get cache info
+export function getCacheInfo(): { [key in CommodityCategory]?: { lastUpdated: string; itemCount: number; isExpired: boolean } } {
+  const info: { [key in CommodityCategory]?: { lastUpdated: string; itemCount: number; isExpired: boolean } } = {};
+  
+  const categories: CommodityCategory[] = ['metals', 'agricultural', 'energy', 'freight', 'bunker'];
+  
+  categories.forEach(category => {
+    try {
+      const cached = localStorage.getItem(getCacheKey(category));
+      if (cached) {
+        const cacheData: CacheData = JSON.parse(cached);
+        const now = Date.now();
+        const isExpired = (now - cacheData.timestamp) > CACHE_DURATION;
+        
+        info[category] = {
+          lastUpdated: cacheData.lastUpdated,
+          itemCount: cacheData.data.length,
+          isExpired
+        };
+      }
+    } catch (error) {
+      console.error(`Error getting cache info for ${category}:`, error);
+    }
+  });
+  
+  return info;
+}
+
 // Function to update the API key
 export function updateApiKey(newKey: string) {
   // Ne rien faire, la clé est codée en dur
@@ -940,20 +1051,36 @@ function createBunkerCommodity(
 
 /**
  * Fetches commodity data from TradingView via the API Ninja for a specific category
+ * Uses cache by default, but can be forced to refresh
  */
-export async function fetchCommoditiesData(category: CommodityCategory = 'metals'): Promise<Commodity[]> {
+export async function fetchCommoditiesData(category: CommodityCategory = 'metals', forceRefresh: boolean = false): Promise<Commodity[]> {
   try {
     // Show loading message
     console.log(`Fetching data for ${category} from TradingView...`);
     
+    // Check cache first (unless force refresh is requested)
+    if (!forceRefresh) {
+      const cachedData = loadFromCache(category);
+      if (cachedData) {
+        console.log(`Returning cached data for ${category}: ${cachedData.length} items`);
+        return cachedData;
+      }
+    } else {
+      console.log(`Force refresh requested for ${category}, ignoring cache`);
+    }
+
     // Special handling for freight
     if (category === 'freight') {
-      return await fetchFreightData();
+      const freightData = await fetchFreightData();
+      saveToCache(category, freightData);
+      return freightData;
     }
     
     // Special handling for bunker
     if (category === 'bunker') {
-      return await fetchBunkerData();
+      const bunkerData = await fetchBunkerData();
+      saveToCache(category, bunkerData);
+      return bunkerData;
     }
     
     // For other categories, use the old method
@@ -973,12 +1100,21 @@ export async function fetchCommoditiesData(category: CommodityCategory = 'metals
     console.log("Raw API response:", data);
     
     // Parse the HTML retrieved to extract commodity data
-    return parseCommoditiesData(data, category);
+    const commodities = parseCommoditiesData(data, category);
+    saveToCache(category, commodities);
+    return commodities;
   } catch (error) {
     console.error(`Error fetching ${category} data:`, error);
     toast.error(`Error fetching ${category} data`);
     throw error; // Propagate the error instead of returning empty array
   }
+}
+
+/**
+ * Forces a refresh of commodity data for a specific category (ignores cache)
+ */
+export async function refreshCommoditiesData(category: CommodityCategory = 'metals'): Promise<Commodity[]> {
+  return fetchCommoditiesData(category, true);
 }
 
 /**

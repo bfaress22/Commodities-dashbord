@@ -192,36 +192,208 @@ let cachedData: WorldBankData | null = null;
 let lastFetchTime: number = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+// Fonction pour détecter la structure du fichier
+function detectFileStructure(data: any[][]): {
+  headerRows: number;
+  dateColumn: number;
+  dataStartRow: number;
+  commodityColumns: number[];
+} {
+  console.log('Detecting file structure...');
+  console.log('Data shape:', data.length, 'rows x', data[0]?.length || 0, 'columns');
+  
+  // Afficher les premières lignes pour debug
+  console.log('First 15 rows:');
+  data.slice(0, 15).forEach((row, index) => {
+    console.log(`Row ${index}:`, row);
+  });
+
+  // Chercher la ligne qui contient les dates (format YYYYMM)
+  let dateRowIndex = -1;
+  let dateColumnIndex = -1;
+  
+  for (let row = 0; row < Math.min(20, data.length); row++) {
+    const rowData = data[row] || [];
+    for (let col = 0; col < rowData.length; col++) {
+      const cell = rowData[col];
+      if (cell && typeof cell === 'string' && /^\d{4}M\d{2}$/.test(cell)) {
+        dateRowIndex = row;
+        dateColumnIndex = col;
+        console.log(`Found date pattern at row ${row}, column ${col}: ${cell}`);
+        break;
+      }
+    }
+    if (dateRowIndex !== -1) break;
+  }
+  
+  if (dateRowIndex === -1) {
+    // Essayer de trouver des dates dans d'autres formats
+    for (let row = 0; row < Math.min(20, data.length); row++) {
+      const rowData = data[row] || [];
+      for (let col = 0; col < rowData.length; col++) {
+        const cell = rowData[col];
+        if (cell && (
+          (typeof cell === 'string' && /^\d{4}-\d{2}/.test(cell)) ||
+          (cell instanceof Date)
+        )) {
+          dateRowIndex = row;
+          dateColumnIndex = col;
+          console.log(`Found alternative date pattern at row ${row}, column ${col}: ${cell}`);
+          break;
+        }
+      }
+      if (dateRowIndex !== -1) break;
+    }
+  }
+  
+  if (dateRowIndex === -1) {
+    throw new Error('Could not find date column in the file');
+  }
+  
+  // Identifier les colonnes de commodités (colonnes avec des données numériques)
+  const commodityColumns: number[] = [];
+  const dataRow = data[dateRowIndex] || [];
+  
+  for (let col = 0; col < dataRow.length; col++) {
+    if (col === dateColumnIndex) continue; // Skip date column
+    
+    const cell = dataRow[col];
+    if (typeof cell === 'number' && !isNaN(cell)) {
+      commodityColumns.push(col);
+    }
+  }
+  
+  // Si pas de données numériques dans cette ligne, chercher dans les lignes suivantes
+  if (commodityColumns.length === 0) {
+    for (let row = dateRowIndex + 1; row < Math.min(dateRowIndex + 5, data.length); row++) {
+      const rowData = data[row] || [];
+      for (let col = 0; col < rowData.length; col++) {
+        if (col === dateColumnIndex) continue;
+        
+        const cell = rowData[col];
+        if (typeof cell === 'number' && !isNaN(cell) && !commodityColumns.includes(col)) {
+          commodityColumns.push(col);
+        }
+      }
+      if (commodityColumns.length > 0) break;
+    }
+  }
+  
+  console.log(`Found ${commodityColumns.length} commodity columns:`, commodityColumns);
+  
+  // Déterminer le nombre de lignes d'en-tête
+  const headerRows = dateRowIndex;
+  const dataStartRow = dateRowIndex;
+  
+  return {
+    headerRows,
+    dateColumn: dateColumnIndex,
+    dataStartRow,
+    commodityColumns
+  };
+}
+
+// Fonction pour extraire les informations de commodité
+function extractCommodityInfo(data: any[][], structure: any): {
+  names: string[];
+  units: string[];
+  symbols: string[];
+} {
+  const names: string[] = [];
+  const units: string[] = [];
+  const symbols: string[] = [];
+  
+  // Chercher les noms des commodités dans les lignes d'en-tête
+  for (let colIndex of structure.commodityColumns) {
+    let name = '';
+    let unit = '';
+    let symbol = '';
+    
+    // Chercher le nom dans les lignes d'en-tête
+    for (let row = 0; row < structure.headerRows; row++) {
+      const cell = data[row]?.[colIndex];
+      if (cell && typeof cell === 'string' && cell.trim().length > 0) {
+        if (!name) {
+          name = cell.trim();
+        } else if (!unit && (cell.includes('$') || cell.includes('USD') || cell.includes('ton') || cell.includes('kg') || cell.includes('bbl'))) {
+          unit = cell.trim();
+        } else if (!symbol && cell.length <= 20) {
+          symbol = cell.trim();
+        }
+      }
+    }
+    
+    // Si pas de nom trouvé, utiliser un nom générique
+    if (!name) {
+      name = `Commodity ${colIndex}`;
+    }
+    
+    // Générer un symbole si pas trouvé
+    if (!symbol) {
+      symbol = name.replace(/\s+/g, '_').toUpperCase().substring(0, 10);
+    }
+    
+    names.push(name);
+    units.push(unit);
+    symbols.push(symbol);
+  }
+  
+  return { names, units, symbols };
+}
+
 // Fonction pour parser les données Excel
 function parseExcelData(arrayBuffer: ArrayBuffer): WorldBankCommodity[] {
   const workbook = XLSX.read(arrayBuffer, { type: 'array' });
   
-  // Look for the Monthly Prices sheet
+  // Essayer de trouver la feuille appropriée
   const sheetNames = workbook.SheetNames;
-  const monthlySheetName = sheetNames.find(name => 
-    name.toLowerCase().includes('monthly') && name.toLowerCase().includes('price')
-  ) || 'Monthly Prices';
+  console.log('Available sheets:', sheetNames);
   
-  const monthlySheet = workbook.Sheets[monthlySheetName];
-  if (!monthlySheet) {
-    throw new Error('Monthly Prices sheet not found in the file');
+  let targetSheet = null;
+  const possibleSheetNames = [
+    'Monthly Prices',
+    'Monthly prices',
+    'MONTHLY PRICES',
+    'Prices',
+    'Data',
+    'Sheet1'
+  ];
+  
+  for (const sheetName of possibleSheetNames) {
+    if (sheetNames.includes(sheetName)) {
+      targetSheet = workbook.Sheets[sheetName];
+      console.log('Using sheet:', sheetName);
+      break;
+    }
   }
   
-  const data = XLSX.utils.sheet_to_json(monthlySheet, { header: 1 }) as any[][];
+  // Si aucune feuille spécifique n'est trouvée, utiliser la première
+  if (!targetSheet && sheetNames.length > 0) {
+    targetSheet = workbook.Sheets[sheetNames[0]];
+    console.log('Using first sheet:', sheetNames[0]);
+  }
   
-  if (data.length < 4) {
+  if (!targetSheet) {
+    throw new Error('No valid sheet found in the Excel file');
+  }
+  
+  const data = XLSX.utils.sheet_to_json(targetSheet, { header: 1 }) as any[][];
+  
+  if (data.length < 2) {
     throw new Error('Invalid file format: insufficient data rows');
   }
   
+  // Détecter la structure du fichier
+  const structure = detectFileStructure(data);
+  
+  // Extraire les informations de commodité
+  const { names, units, symbols } = extractCommodityInfo(data, structure);
+  
   const commodities: WorldBankCommodity[] = [];
   
-  // Parse headers (row 0: names, row 1: units, row 2: symbols)
-  const names = data[0] || [];
-  const units = data[1] || [];
-  const symbols = data[2] || [];
-  
-  // Process each commodity column (starting from index 1 to skip date column)
-  for (let i = 1; i < names.length; i++) {
+  // Traiter chaque colonne de commodité
+  for (let i = 0; i < structure.commodityColumns.length; i++) {
+    const colIndex = structure.commodityColumns[i];
     const name = names[i];
     const unit = units[i];
     const symbol = symbols[i];
@@ -231,15 +403,15 @@ function parseExcelData(arrayBuffer: ArrayBuffer): WorldBankCommodity[] {
     const category = COMMODITY_CATEGORIES[symbol] || WORLD_BANK_CATEGORIES.OTHER;
     const displayName = COMMODITY_DISPLAY_NAMES[symbol] || name;
     
-    // Extract time series data
+    // Extraire les données de série temporelle
     const timeSeriesData: { date: string; value: number }[] = [];
     
-    for (let j = 3; j < data.length; j++) {
+    for (let j = structure.dataStartRow; j < data.length; j++) {
       const row = data[j];
-      if (!row || row.length <= i) continue;
+      if (!row || row.length <= colIndex) continue;
       
-      const date = row[0];
-      const value = row[i];
+      const date = row[structure.dateColumn];
+      const value = row[colIndex];
       
       if (date && typeof value === 'number' && !isNaN(value)) {
         timeSeriesData.push({
@@ -270,6 +442,7 @@ function parseExcelData(arrayBuffer: ArrayBuffer): WorldBankCommodity[] {
     }
   }
   
+  console.log(`Successfully parsed ${commodities.length} commodities`);
   return commodities;
 }
 
@@ -279,7 +452,7 @@ export async function importWorldBankPinkSheet(file: File): Promise<WorldBankDat
     const commodities = parseExcelData(arrayBuffer);
     
     if (commodities.length === 0) {
-      throw new Error('No valid commodity data found in the file');
+      throw new Error('No valid commodity data found in the file. Please check if this is a valid World Bank Pink Sheet.');
     }
     
     const result: WorldBankData = {
@@ -368,4 +541,14 @@ export function getCurrentWorldBankData(): WorldBankData | null {
 export function clearWorldBankData(): void {
   cachedData = null;
   lastFetchTime = 0;
+}
+
+/**
+ * Forces a refresh of World Bank data (ignores cache)
+ */
+export async function refreshWorldBankData(): Promise<WorldBankData> {
+  // Clear cache and fetch fresh data
+  cachedData = null;
+  lastFetchTime = 0;
+  return fetchWorldBankData();
 } 
