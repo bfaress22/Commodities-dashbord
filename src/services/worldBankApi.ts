@@ -108,76 +108,97 @@ const COMMODITY_CATEGORIES: Record<string, string> = {
   // Fertilizers
   'PHOSROCK': WORLD_BANK_CATEGORIES.FERTILIZERS,
   'DAP': WORLD_BANK_CATEGORIES.FERTILIZERS,
+  'DAP_FERTILIZER': WORLD_BANK_CATEGORIES.FERTILIZERS,
+  'DIAMMONIUM_PHOSPHATE': WORLD_BANK_CATEGORIES.FERTILIZERS,
   'TSP': WORLD_BANK_CATEGORIES.FERTILIZERS,
   'UREA_EE_BULK': WORLD_BANK_CATEGORIES.FERTILIZERS,
-  'POTASH': WORLD_BANK_CATEGORIES.FERTILIZERS,
+  'UREA': WORLD_BANK_CATEGORIES.FERTILIZERS,
+  'POTASH': WORLD_BANK_CATEGORIES.FERTILIZERS
 };
 
 // Mapping des noms d'affichage
 const COMMODITY_DISPLAY_NAMES: Record<string, string> = {
-  'CRUDE_PETRO': 'Crude Oil (Average)',
-  'CRUDE_BRENT': 'Crude Oil (Brent)',
-  'CRUDE_DUBAI': 'Crude Oil (Dubai)',
-  'CRUDE_WTI': 'Crude Oil (WTI)',
-  'COAL_AUS': 'Coal (Australian)',
-  'COAL_SAFRICA': 'Coal (South African)',
-  'NGAS_US': 'Natural Gas (US)',
-  'NGAS_EUR': 'Natural Gas (Europe)',
-  'NGAS_JP': 'LNG (Japan)',
-  'iNATGAS': 'Natural Gas Index',
+  // Energy commodities
+  'CRUDE_PETRO': 'Crude oil, average',
+  'CRUDE_BRENT': 'Crude oil, Brent',
+  'CRUDE_DUBAI': 'Crude oil, Dubai',
+  'CRUDE_WTI': 'Crude oil, WTI',
+  'COAL_AUS': 'Coal, Australian',
+  'COAL_SAFRICA': 'Coal, South African',
+  'NGAS_US': 'Natural gas, US',
+  'NGAS_EUR': 'Natural gas, Europe',
+  'NGAS_JP': 'Liquefied natural gas, Japan',
+  'iNATGAS': 'Natural gas index',
+  
+  // Agricultural - Beverages
   'COCOA': 'Cocoa',
-  'COFFEE_ARABIC': 'Coffee (Arabica)',
-  'COFFEE_ROBUS': 'Coffee (Robusta)',
-  'TEA_AVG': 'Tea (Average)',
-  'TEA_COLOMBO': 'Tea (Colombo)',
-  'TEA_KOLKATA': 'Tea (Kolkata)',
-  'TEA_MOMBASA': 'Tea (Mombasa)',
-  'COCONUT_OIL': 'Coconut Oil',
+  'COFFEE_ARABIC': 'Coffee, Arabica',
+  'COFFEE_ROBUS': 'Coffee, Robusta',
+  'TEA_AVG': 'Tea, avg 3 auctions',
+  'TEA_COLOMBO': 'Tea, Colombo',
+  'TEA_KOLKATA': 'Tea, Kolkata',
+  'TEA_MOMBASA': 'Tea, Mombasa',
+  
+  // Agricultural - Oils
+  'COCONUT_OIL': 'Coconut oil',
   'GRNUT': 'Groundnuts',
-  'FISH_MEAL': 'Fish Meal',
-  'GRNUT_OIL': 'Groundnut Oil',
-  'PALM_OIL': 'Palm Oil',
-  'PLMKRNL_OIL': 'Palm Kernel Oil',
+  'FISH_MEAL': 'Fish meal',
+  'GRNUT_OIL': 'Groundnut oil',
+  'PALM_OIL': 'Palm oil',
+  'PLMKRNL_OIL': 'Palm kernel oil',
   'SOYBEANS': 'Soybeans',
-  'SOYBEAN_OIL': 'Soybean Oil',
-  'SOYBEAN_MEAL': 'Soybean Meal',
-  'RAPESEED_OIL': 'Rapeseed Oil',
-  'SUNFLOWER_OIL': 'Sunflower Oil',
+  'SOYBEAN_OIL': 'Soybean oil',
+  'SOYBEAN_MEAL': 'Soybean meal',
+  'RAPESEED_OIL': 'Rapeseed oil',
+  'SUNFLOWER_OIL': 'Sunflower oil',
+  
+  // Agricultural - Grains
   'BARLEY': 'Barley',
   'MAIZE': 'Maize',
   'SORGHUM': 'Sorghum',
-  'RICE_05': 'Rice (Thai 5%)',
-  'RICE_25': 'Rice (Thai 25%)',
-  'RICE_A1': 'Rice (Thai A.1)',
-  'RICE_05_VNM': 'Rice (Vietnamese 5%)',
-  'WHEAT_US_SRW': 'Wheat (US SRW)',
-  'WHEAT_US_HRW': 'Wheat (US HRW)',
-  'BANANA_EU': 'Banana (Europe)',
-  'BANANA_US': 'Banana (US)',
+  'RICE_05': 'Rice, Thai 5%',
+  'RICE_25': 'Rice, Thai 25%',
+  'RICE_A1': 'Rice, Thai A.1',
+  'RICE_05_VNM': 'Rice, Viet Namese 5%',
+  'WHEAT_US_SRW': 'Wheat, US SRW',
+  'WHEAT_US_HRW': 'Wheat, US HRW',
+  
+  // Agricultural - Other foods
+  'BANANA_EU': 'Banana, Europe',
+  'BANANA_US': 'Banana, US',
   'ORANGE': 'Orange',
   'BEEF': 'Beef',
   'CHICKEN': 'Chicken',
   'LAMB': 'Lamb',
-  'SHRIMP_MEX': 'Shrimps (Mexican)',
-  'SUGAR_EU': 'Sugar (EU)',
-  'SUGAR_US': 'Sugar (US)',
-  'SUGAR_WLD': 'Sugar (World)',
-  'TOBAC_US': 'Tobacco (US)',
-  'LOGS_CMR': 'Logs (Cameroon)',
-  'LOGS_MYS': 'Logs (Malaysian)',
-  'SAWNWD_CMR': 'Sawnwood (Cameroon)',
-  'SAWNWD_MYS': 'Sawnwood (Malaysian)',
+  'SHRIMP_MEX': 'Shrimps, Mexican',
+  'SUGAR_EU': 'Sugar, EU',
+  'SUGAR_US': 'Sugar, US',
+  'SUGAR_WLD': 'Sugar, world',
+  'TOBAC_US': 'Tobacco, US import u.v.',
+  
+  // Agricultural - Raw materials
+  'LOGS_CMR': 'Logs, Cameroon',
+  'LOGS_MYS': 'Logs, Malaysian',
+  'SAWNWD_CMR': 'Sawnwood, Cameroon',
+  'SAWNWD_MYS': 'Sawnwood, Malaysian',
   'PLYWOOD': 'Plywood',
-  'COTTON_A_INDX': 'Cotton (A Index)',
-  'RUBBER_TSR20': 'Rubber (TSR20)',
-  'RUBBER1_MYSG': 'Rubber (RSS3)',
-  'PHOSROCK': 'Phosphate Rock',
+  'COTTON_A_INDX': 'Cotton, A Index',
+  'RUBBER_TSR20': 'Rubber, TSR20',
+  'RUBBER1_MYSG': 'Rubber, RSS3',
+  
+  // Fertilizers
+  'PHOSROCK': 'Phosphate rock',
   'DAP': 'DAP',
+  'DAP_FERTILIZER': 'DAP',
+  'DIAMMONIUM_PHOSPHATE': 'DAP',
   'TSP': 'TSP',
   'UREA_EE_BULK': 'Urea',
-  'POTASH': 'Potassium Chloride',
+  'UREA': 'Urea',
+  'POTASH': 'Potassium chloride',
+  
+  // Metals
   'ALUMINUM': 'Aluminum',
-  'IRON_ORE': 'Iron Ore',
+  'IRON_ORE': 'Iron ore, cfr spot',
   'COPPER': 'Copper',
   'LEAD': 'Lead',
   'Tin': 'Tin',
@@ -250,36 +271,52 @@ function detectFileStructure(data: any[][]): {
     throw new Error('Could not find date column in the file');
   }
   
-  // Identifier les colonnes de commodités (colonnes avec des données numériques)
+  // Identifier les colonnes de commodités - INCLURE TOUTES LES COLONNES avec un nom
   const commodityColumns: number[] = [];
-  const dataRow = data[dateRowIndex] || [];
+  const columnDataCount: { [col: number]: number } = {};
   
-  for (let col = 0; col < dataRow.length; col++) {
-    if (col === dateColumnIndex) continue; // Skip date column
-    
-    const cell = dataRow[col];
-    if (typeof cell === 'number' && !isNaN(cell)) {
-      commodityColumns.push(col);
+  // D'abord, analyser les données numériques disponibles pour information
+  const maxRowsToCheck = Math.min(50, data.length - dateRowIndex);
+  for (let row = dateRowIndex; row < dateRowIndex + maxRowsToCheck; row++) {
+    const rowData = data[row] || [];
+    for (let col = 0; col < rowData.length; col++) {
+      if (col === dateColumnIndex) continue; // Skip date column
+      
+      const cell = rowData[col];
+      if (cell !== null && cell !== undefined && cell !== '' && 
+          typeof cell === 'number' && !isNaN(cell)) {
+        columnDataCount[col] = (columnDataCount[col] || 0) + 1;
+      }
     }
   }
   
-  // Si pas de données numériques dans cette ligne, chercher dans les lignes suivantes
-  if (commodityColumns.length === 0) {
-    for (let row = dateRowIndex + 1; row < Math.min(dateRowIndex + 5, data.length); row++) {
-      const rowData = data[row] || [];
-      for (let col = 0; col < rowData.length; col++) {
-        if (col === dateColumnIndex) continue;
-        
-        const cell = rowData[col];
-        if (typeof cell === 'number' && !isNaN(cell) && !commodityColumns.includes(col)) {
-          commodityColumns.push(col);
-        }
+  // INCLURE TOUTES LES COLONNES qui ont un nom dans les en-têtes
+  const maxColumns = Math.max(data[0]?.length || 0, ...data.slice(0, dateRowIndex).map(row => row?.length || 0));
+  
+  for (let col = 0; col < maxColumns; col++) {
+    if (col === dateColumnIndex) continue; // Skip date column
+    
+    // Vérifier s'il y a un nom dans les lignes d'en-tête
+    let hasName = false;
+    for (let row = 0; row < dateRowIndex; row++) {
+      const cell = data[row]?.[col];
+      if (cell && typeof cell === 'string' && cell.trim().length >= 2 && 
+          !cell.match(/^\d+$/) && !cell.toLowerCase().includes('unit') && 
+          !cell.toLowerCase().includes('source') && !cell.includes('$') &&
+          !cell.toLowerCase().includes('period')) {
+        hasName = true;
+        break;
       }
-      if (commodityColumns.length > 0) break;
+    }
+    
+    if (hasName) {
+      commodityColumns.push(col);
+      console.log(`Including column ${col} (has name, ${columnDataCount[col] || 0} data points)`);
     }
   }
   
   console.log(`Found ${commodityColumns.length} commodity columns:`, commodityColumns);
+  console.log('Column data counts:', columnDataCount);
   
   // Déterminer le nombre de lignes d'en-tête
   const headerRows = dateRowIndex;
@@ -309,28 +346,58 @@ function extractCommodityInfo(data: any[][], structure: any): {
     let unit = '';
     let symbol = '';
     
-    // Chercher le nom dans les lignes d'en-tête
-    for (let row = 0; row < structure.headerRows; row++) {
+    // Chercher le nom dans les lignes d'en-tête (en priorité les lignes les plus proches des données)
+    for (let row = Math.max(0, structure.headerRows - 3); row < structure.headerRows; row++) {
       const cell = data[row]?.[colIndex];
       if (cell && typeof cell === 'string' && cell.trim().length > 0) {
-        if (!name) {
-          name = cell.trim();
-        } else if (!unit && (cell.includes('$') || cell.includes('USD') || cell.includes('ton') || cell.includes('kg') || cell.includes('bbl'))) {
-          unit = cell.trim();
-        } else if (!symbol && cell.length <= 20) {
-          symbol = cell.trim();
+        const cellValue = cell.trim();
+        
+        // Identifier les unités
+        if (!unit && (cellValue.includes('$') || cellValue.includes('USD') || cellValue.includes('ton') || 
+                     cellValue.includes('kg') || cellValue.includes('bbl') || cellValue.includes('cents') ||
+                     cellValue.includes('yen') || cellValue.includes('euro') || cellValue.includes('per'))) {
+          unit = cellValue;
+        }
+                 // Identifier le nom principal (ligne la plus proche des données avec un nom significatif)
+         // Accepter aussi les noms courts comme "DAP", "TSP" pour les fertilizers
+         else if (!name && cellValue.length >= 2 && !cellValue.match(/^\d+$/) && 
+                 !cellValue.toLowerCase().includes('unit') && !cellValue.toLowerCase().includes('source')) {
+           name = cellValue;
+         }
+        // Identifier le symbole (généralement court et en majuscules)
+        else if (!symbol && cellValue.length <= 15 && cellValue.match(/^[A-Z_0-9]+$/)) {
+          symbol = cellValue;
         }
       }
     }
     
-    // Si pas de nom trouvé, utiliser un nom générique
+    // Si pas de nom trouvé, chercher dans toutes les lignes d'en-tête
     if (!name) {
-      name = `Commodity ${colIndex}`;
+      for (let row = 0; row < structure.headerRows; row++) {
+        const cell = data[row]?.[colIndex];
+        if (cell && typeof cell === 'string' && cell.trim().length > 2) {
+          const cellValue = cell.trim();
+          if (!cellValue.toLowerCase().includes('unit') && !cellValue.toLowerCase().includes('source') && 
+              !cellValue.match(/^\d+$/) && !cellValue.includes('$')) {
+            name = cellValue;
+            break;
+          }
+        }
+      }
     }
     
-    // Générer un symbole si pas trouvé
+    // Si toujours pas de nom, utiliser un nom générique
+    if (!name) {
+      name = `Commodity_${colIndex}`;
+    }
+    
+    // Générer un symbole basé sur le nom si pas trouvé
     if (!symbol) {
-      symbol = name.replace(/\s+/g, '_').toUpperCase().substring(0, 10);
+      symbol = name
+        .replace(/[^a-zA-Z0-9\s]/g, '') // Remove special characters
+        .replace(/\s+/g, '_') // Replace spaces with underscores
+        .toUpperCase()
+        .substring(0, 15);
     }
     
     names.push(name);
@@ -338,6 +405,7 @@ function extractCommodityInfo(data: any[][], structure: any): {
     symbols.push(symbol);
   }
   
+  console.log('Extracted commodity info:', { names, units, symbols });
   return { names, units, symbols };
 }
 
@@ -398,10 +466,15 @@ function parseExcelData(arrayBuffer: ArrayBuffer): WorldBankCommodity[] {
     const unit = units[i];
     const symbol = symbols[i];
     
-    if (!name || !symbol) continue;
+    // Skip only if both name and symbol are empty
+    if (!name && !symbol) continue;
     
-    const category = COMMODITY_CATEGORIES[symbol] || WORLD_BANK_CATEGORIES.OTHER;
-    const displayName = COMMODITY_DISPLAY_NAMES[symbol] || name;
+    // Use name as symbol if symbol is empty, and vice versa
+    const finalSymbol = symbol || name.replace(/\s+/g, '_').toUpperCase().substring(0, 20);
+    const finalName = name || symbol;
+    
+    const category = COMMODITY_CATEGORIES[finalSymbol] || WORLD_BANK_CATEGORIES.OTHER;
+    const displayName = COMMODITY_DISPLAY_NAMES[finalSymbol] || finalName;
     
     // Extraire les données de série temporelle
     const timeSeriesData: { date: string; value: number }[] = [];
@@ -413,7 +486,9 @@ function parseExcelData(arrayBuffer: ArrayBuffer): WorldBankCommodity[] {
       const date = row[structure.dateColumn];
       const value = row[colIndex];
       
-      if (date && typeof value === 'number' && !isNaN(value)) {
+      // Accepter les valeurs numériques valides (y compris 0) et ignorer les cellules vides/null/undefined
+      if (date && value !== null && value !== undefined && value !== '' && 
+          typeof value === 'number' && !isNaN(value)) {
         timeSeriesData.push({
           date: date.toString(),
           value: value
@@ -421,18 +496,26 @@ function parseExcelData(arrayBuffer: ArrayBuffer): WorldBankCommodity[] {
       }
     }
     
-    if (timeSeriesData.length > 0) {
-      const currentValue = timeSeriesData[timeSeriesData.length - 1]?.value;
-      const previousValue = timeSeriesData[timeSeriesData.length - 2]?.value;
+    // Inclure la commodité même si elle n'a pas de données (pour afficher toutes les colonnes)
+    // if (timeSeriesData.length > 0) { // Commenté pour inclure toutes les commodités
+    if (true) { // Toujours inclure la commodité
+      // Trouver la valeur la plus récente (non-nulle)
+      const currentValue = timeSeriesData.length > 0 ? timeSeriesData[timeSeriesData.length - 1]?.value : undefined;
+      
+      // Trouver la valeur précédente pour calculer le changement
+      let previousValue = undefined;
+      if (timeSeriesData.length > 1) {
+        previousValue = timeSeriesData[timeSeriesData.length - 2]?.value;
+      }
       
       const change = currentValue && previousValue ? currentValue - previousValue : undefined;
       const changePercent = currentValue && previousValue ? ((change! / previousValue) * 100) : undefined;
       
       commodities.push({
-        id: symbol,
+        id: finalSymbol,
         name: displayName,
         unit: unit || '',
-        symbol: symbol,
+        symbol: finalSymbol,
         category,
         data: timeSeriesData,
         currentValue,
