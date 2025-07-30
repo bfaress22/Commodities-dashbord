@@ -2,8 +2,9 @@ interface ScrapingResult {
   data: string;
 }
 
-// URL du serveur local de scraping
-const SCRAPING_SERVER_URL = 'http://localhost:3001';
+// Configuration pour les différents environnements
+const isDev = process.env.NODE_ENV === 'development';
+const SCRAPING_SERVER_URL = isDev ? 'http://localhost:3000' : ''; // En production, utilise les API routes Vercel relatives
 const API_KEY = ''; // Fallback API key
 
 /**
@@ -11,10 +12,12 @@ const API_KEY = ''; // Fallback API key
  */
 export async function scrapePage(url: string): Promise<ScrapingResult> {
   try {
-    console.log(`Trying to scrape via local Puppeteer server: ${url}`);
+    console.log(`Trying to scrape via Vercel Puppeteer functions: ${url}`);
     
-    const response = await fetch(`${SCRAPING_SERVER_URL}/api/webscraper?url=${encodeURIComponent(url)}`, {
-      timeout: 10000 // 10 secondes timeout
+    const apiUrl = `${SCRAPING_SERVER_URL}/api/webscraper?url=${encodeURIComponent(url)}`;
+    
+    const response = await fetch(apiUrl, {
+      timeout: 30000 // 30 secondes timeout pour les fonctions serverless
     } as any);
     
     if (!response.ok) {
@@ -58,33 +61,128 @@ export async function scrapePage(url: string): Promise<ScrapingResult> {
  * Scrape une page TradingView spécifique pour un symbole
  */
 export async function scrapeTradingViewSymbol(symbol: string): Promise<ScrapingResult> {
-  const url = `https://www.tradingview.com/symbols/NYMEX-${symbol}/`;
-  return scrapePage(url); // Utilise la fonction avec fallback
+  try {
+    console.log(`Scraping TradingView symbol: ${symbol}`);
+    
+    const apiUrl = `${SCRAPING_SERVER_URL}/api/tradingview/symbol/${symbol}`;
+    
+    const response = await fetch(apiUrl, {
+      timeout: 30000
+    } as any);
+    
+    if (!response.ok) {
+      throw new Error(`Vercel function error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log(`Successfully scraped via Vercel symbol ${symbol}: ${data.data.length} characters`);
+    
+    return data;
+    
+  } catch (error) {
+    console.warn(`Vercel function failed for symbol ${symbol}, falling back:`, error);
+    
+    // Fallback vers la fonction générique ou API Ninja
+    const url = `https://www.tradingview.com/symbols/NYMEX-${symbol}/`;
+    return scrapePage(url);
+  }
 }
 
 /**
  * Scrape une catégorie de commodités sur TradingView
  */
 export async function scrapeTradingViewCategory(category: string): Promise<ScrapingResult> {
-  const url = `https://www.tradingview.com/markets/futures/quotes-${category}/`;
-  return scrapePage(url); // Utilise la fonction avec fallback
+  try {
+    console.log(`Scraping TradingView category: ${category}`);
+    
+    const apiUrl = `${SCRAPING_SERVER_URL}/api/tradingview/${category}`;
+    
+    const response = await fetch(apiUrl, {
+      timeout: 30000
+    } as any);
+    
+    if (!response.ok) {
+      throw new Error(`Vercel function error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log(`Successfully scraped via Vercel category ${category}: ${data.data.length} characters`);
+    
+    return data;
+    
+  } catch (error) {
+    console.warn(`Vercel function failed for category ${category}, falling back:`, error);
+    
+    // Fallback vers la fonction générique ou API Ninja
+    const url = `https://www.tradingview.com/markets/futures/quotes-${category}/`;
+    return scrapePage(url);
+  }
 }
 
 /**
  * Scrape Ship & Bunker pour les prix des bunkers
  */
 export async function scrapeShipAndBunker(bunkerType?: string): Promise<ScrapingResult> {
-  let url = 'https://shipandbunker.com/prices';
-  if (bunkerType) {
-    url += `#${bunkerType.toUpperCase()}`;
+  try {
+    console.log(`Scraping Ship & Bunker: ${bunkerType || 'all types'}`);
+    
+    let apiUrl = `${SCRAPING_SERVER_URL}/api/shipandbunker`;
+    if (bunkerType) {
+      apiUrl += `?type=${bunkerType}`;
+    }
+    
+    const response = await fetch(apiUrl, {
+      timeout: 30000
+    } as any);
+    
+    if (!response.ok) {
+      throw new Error(`Vercel function error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log(`Successfully scraped via Vercel Ship & Bunker: ${data.data.length} characters`);
+    
+    return data;
+    
+  } catch (error) {
+    console.warn(`Vercel function failed for Ship & Bunker, falling back:`, error);
+    
+    // Fallback vers la fonction générique ou API Ninja
+    let url = 'https://shipandbunker.com/prices';
+    if (bunkerType) {
+      url += `#${bunkerType.toUpperCase()}`;
+    }
+    return scrapePage(url);
   }
-  return scrapePage(url); // Utilise la fonction avec fallback
 }
 
 /**
  * Scrape la page EMEA de Ship & Bunker pour Gibraltar
  */
 export async function scrapeShipAndBunkerEMEA(): Promise<ScrapingResult> {
-  const url = 'https://shipandbunker.com/prices/emea';
-  return scrapePage(url); // Utilise la fonction avec fallback
+  try {
+    console.log('Scraping Ship & Bunker EMEA');
+    
+    const apiUrl = `${SCRAPING_SERVER_URL}/api/shipandbunker/emea`;
+    
+    const response = await fetch(apiUrl, {
+      timeout: 30000
+    } as any);
+    
+    if (!response.ok) {
+      throw new Error(`Vercel function error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log(`Successfully scraped via Vercel Ship & Bunker EMEA: ${data.data.length} characters`);
+    
+    return data;
+    
+  } catch (error) {
+    console.warn(`Vercel function failed for Ship & Bunker EMEA, falling back:`, error);
+    
+    // Fallback vers la fonction générique ou API Ninja
+    const url = 'https://shipandbunker.com/prices/emea';
+    return scrapePage(url);
+  }
 } 

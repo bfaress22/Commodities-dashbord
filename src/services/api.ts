@@ -124,14 +124,17 @@ export function updateApiKey(newKey: string) {
 // Function to validate the API key
 export async function validateApiKey(key: string): Promise<boolean> {
   try {
-    // Tester d'abord si le serveur Puppeteer est disponible
-    const response = await fetch('http://localhost:3001/api/health');
+    // Tester d'abord si les fonctions Vercel Puppeteer sont disponibles
+    const isDev = process.env.NODE_ENV === 'development';
+    const healthUrl = isDev ? 'http://localhost:3000/api/health' : '/api/health';
+    
+    const response = await fetch(healthUrl);
     if (response.ok) {
-      // Si le serveur Puppeteer fonctionne, tester une requête simple
+      // Si les fonctions Vercel Puppeteer fonctionnent, tester une requête simple
       const testData = await scrapeTradingViewCategory('metals');
       return !!testData && !!testData.data && testData.data.length > 1000;
     } else {
-      console.warn('Puppeteer server not available, falling back to API Ninja');
+      console.warn('Vercel Puppeteer functions not available, falling back to API Ninja');
       return true; // Fallback : accepter n'importe quelle clé
     }
   } catch (error) {
