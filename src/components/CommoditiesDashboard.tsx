@@ -86,15 +86,28 @@ export default function CommoditiesDashboard() {
     }
   };
 
-  // Charger toutes les données
+  // Charger toutes les données en parallèle (optimisé)
   const loadAllData = async (forceRefresh: boolean = false) => {
+    console.log('🚀 Starting parallel data loading...');
+    const startTime = Date.now();
+    
+    // Charger toutes les catégories en parallèle pour maximum de vitesse
     await Promise.all([
       loadCategoryData('metals', forceRefresh),
-      loadCategoryData('agricultural', forceRefresh),
+      loadCategoryData('agricultural', forceRefresh), 
       loadCategoryData('energy', forceRefresh),
       loadCategoryData('freight', forceRefresh),
       loadCategoryData('bunker', forceRefresh)
     ]);
+    
+    const endTime = Date.now();
+    const loadTime = endTime - startTime;
+    console.log(`✅ All data loaded in ${loadTime}ms (${(loadTime/1000).toFixed(1)}s)`);
+    
+    // Afficher un toast de succès si le chargement est rapide
+    if (loadTime < 10000) { // Moins de 10 secondes
+      toast.success(`Données chargées rapidement en ${(loadTime/1000).toFixed(1)}s`);
+    }
   };
 
   // Charger les données initiales

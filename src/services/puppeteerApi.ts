@@ -17,7 +17,7 @@ export async function scrapePage(url: string): Promise<ScrapingResult> {
     const apiUrl = `${SCRAPING_SERVER_URL}/api/webscraper?url=${encodeURIComponent(url)}`;
     
     const response = await fetch(apiUrl, {
-      timeout: 30000 // 30 secondes timeout pour les fonctions serverless
+      timeout: 20000 // 20 secondes timeout optimisé 
     } as any);
     
     if (!response.ok) {
@@ -67,7 +67,7 @@ export async function scrapeTradingViewSymbol(symbol: string): Promise<ScrapingR
     const apiUrl = `${SCRAPING_SERVER_URL}/api/tradingview/symbol/${symbol}`;
     
     const response = await fetch(apiUrl, {
-      timeout: 30000
+      timeout: 20000 // Timeout optimisé pour les symboles
     } as any);
     
     if (!response.ok) {
@@ -98,7 +98,7 @@ export async function scrapeTradingViewCategory(category: string): Promise<Scrap
     const apiUrl = `${SCRAPING_SERVER_URL}/api/tradingview/${category}`;
     
     const response = await fetch(apiUrl, {
-      timeout: 30000
+      timeout: 20000 // Timeout optimisé pour les catégories
     } as any);
     
     if (!response.ok) {
@@ -132,7 +132,7 @@ export async function scrapeShipAndBunker(bunkerType?: string): Promise<Scraping
     }
     
     const response = await fetch(apiUrl, {
-      timeout: 30000
+      timeout: 15000 // Timeout plus court pour Ship & Bunker
     } as any);
     
     if (!response.ok) {
@@ -166,7 +166,7 @@ export async function scrapeShipAndBunkerEMEA(): Promise<ScrapingResult> {
     const apiUrl = `${SCRAPING_SERVER_URL}/api/shipandbunker/emea`;
     
     const response = await fetch(apiUrl, {
-      timeout: 30000
+      timeout: 15000 // Timeout plus court pour Ship & Bunker EMEA  
     } as any);
     
     if (!response.ok) {

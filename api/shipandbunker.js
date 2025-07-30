@@ -1,26 +1,7 @@
-import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
-
-// Configuration pour l'environnement serverless
-const isDev = !process.env.AWS_REGION;
-
-async function getBrowser() {
-  return puppeteer.launch({
-    args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
-    executablePath: isDev 
-      ? undefined // Utilise l'installation locale en développement
-      : await chromium.executablePath(),
-    headless: chromium.headless,
-    ignoreHTTPSErrors: true,
-  });
-}
+import { getBrowser, setupPage, smartWait, setCorsHeaders } from './utils/puppeteer-config.js';
 
 export default async function handler(req, res) {
-  // Configurer CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -41,27 +22,24 @@ export default async function handler(req, res) {
   let page = null;
 
   try {
-    console.log(`Scraping Ship & Bunker: ${type || 'all types'}`);
+    console.log(`Fast scraping Ship & Bunker: ${type || 'all types'}`);
     
     browser = await getBrowser();
     page = await browser.newPage();
     
-    // Configuration de la page
-    await page.setViewport({ width: 1920, height: 1080 });
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+    // Configuration optimisée de la page
+    await setupPage(page);
     
-    // Naviguer vers la page
+    // Naviguer vers la page avec timeout réduit
     console.log(`Navigating to: ${url}`);
     await page.goto(url, { 
       waitUntil: 'domcontentloaded',
-      timeout: 30000 
+      timeout: 15000 // Timeout réduit pour Ship & Bunker
     });
     console.log('Ship & Bunker page loaded successfully');
     
-    // Attendre que le contenu se charge
-    console.log('Waiting for Ship & Bunker content to render...');
-    await new Promise(resolve => setTimeout(resolve, 6000));
-    console.log('Wait completed');
+    // Attente intelligente optimisée
+    await smartWait(page, url);
     
     // Extraire le HTML
     const html = await page.content();
