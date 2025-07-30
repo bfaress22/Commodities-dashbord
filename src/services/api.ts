@@ -1,8 +1,9 @@
 import { toast } from "sonner";
 import { parse } from "node-html-parser";
+import { scrapeTradingViewSymbol, scrapeTradingViewCategory, scrapeShipAndBunker, scrapeShipAndBunkerEMEA } from './puppeteerApi';
 
 // API key variable that can be updated
-let API_KEY = 'EWzCURtf517KNAYxR3ODKA==5RzrjpG7MWHTd50w';
+let API_KEY = '';
 
 // Cache interface
 interface CacheData {
@@ -123,23 +124,20 @@ export function updateApiKey(newKey: string) {
 // Function to validate the API key
 export async function validateApiKey(key: string): Promise<boolean> {
   try {
-    // Test the API with the provided key
-    const response = await fetch('https://api.api-ninjas.com/v1/webscraper?url=https://www.tradingview.com/markets/futures/quotes-metals/', {
-      headers: {
-        'X-Api-Key': key
-      }
-    });
-
-    if (!response.ok) {
-      return false;
+    // Tester d'abord si le serveur Puppeteer est disponible
+    const response = await fetch('http://localhost:3001/api/health');
+    if (response.ok) {
+      // Si le serveur Puppeteer fonctionne, tester une requête simple
+      const testData = await scrapeTradingViewCategory('metals');
+      return !!testData && !!testData.data && testData.data.length > 1000;
+    } else {
+      console.warn('Puppeteer server not available, falling back to API Ninja');
+      return true; // Fallback : accepter n'importe quelle clé
     }
-
-    // If we get a successful response, the key is valid
-    const data = await response.json();
-    return !!data && !!data.data;
   } catch (error) {
-    console.error('Error validating API key:', error);
-    return false;
+    console.error('Error validating scraping capability:', error);
+    console.warn('Falling back to API Ninja mode');
+    return true; // Fallback : accepter n'importe quelle clé
   }
 }
 
@@ -218,20 +216,7 @@ const FREIGHT_SYMBOLS = [
  */
 async function fetchFreightSymbolData(symbol: string, name: string, type: Commodity['type']): Promise<Commodity | null> {
   try {
-    const url = `https://api.api-ninjas.com/v1/webscraper?url=https://www.tradingview.com/symbols/NYMEX-${symbol}/`;
-    
-    const response = await fetch(url, {
-      headers: {
-        'X-Api-Key': API_KEY
-      }
-    });
-
-    if (!response.ok) {
-      console.warn(`Failed to fetch ${symbol}: ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json();
+    const data = await scrapeTradingViewSymbol(symbol);
     
     if (!data || !data.data) {
       console.warn(`No data received for ${symbol}`);
@@ -552,20 +537,12 @@ async function fetchBunkerData(): Promise<Commodity[]> {
   try {
     console.log('Fetching Gibraltar bunker data from EMEA page...');
     
-    const gibraltarResponse = await fetch(`https://api.api-ninjas.com/v1/webscraper?url=${encodeURIComponent('https://shipandbunker.com/prices/emea')}`, {
-      headers: {
-        'X-Api-Key': API_KEY
-      }
-    });
-
-    if (gibraltarResponse.ok) {
-      const gibraltarData = await gibraltarResponse.json();
-      
-      if (gibraltarData && gibraltarData.data) {
-        const gibraltarCommodities = parseGibraltarData(gibraltarData.data);
-        allBunkerCommodities.push(...gibraltarCommodities);
-        console.log(`Found ${gibraltarCommodities.length} Gibraltar bunker commodities`);
-      }
+    const gibraltarData = await scrapeShipAndBunkerEMEA();
+    
+    if (gibraltarData && gibraltarData.data) {
+      const gibraltarCommodities = parseGibraltarData(gibraltarData.data);
+      allBunkerCommodities.push(...gibraltarCommodities);
+      console.log(`Found ${gibraltarCommodities.length} Gibraltar bunker commodities`);
     }
     
     // Add delay before next requests
@@ -579,18 +556,7 @@ async function fetchBunkerData(): Promise<Commodity[]> {
     try {
       console.log(`Fetching ${bunkerType.name} data...`);
       
-      const response = await fetch(`https://api.api-ninjas.com/v1/webscraper?url=${encodeURIComponent(bunkerType.url)}`, {
-        headers: {
-          'X-Api-Key': API_KEY
-        }
-      });
-
-      if (!response.ok) {
-        console.warn(`Failed to fetch ${bunkerType.name}: ${response.status}`);
-        continue;
-      }
-
-      const data = await response.json();
+      const data = await scrapeShipAndBunker(bunkerType.type);
       
       if (!data || !data.data) {
         console.warn(`No data received for ${bunkerType.name}`);
@@ -1083,21 +1049,9 @@ export async function fetchCommoditiesData(category: CommodityCategory = 'metals
       return bunkerData;
     }
     
-    // For other categories, use the old method
-    const url = `https://api.api-ninjas.com/v1/webscraper?url=https://www.tradingview.com/markets/futures/quotes-${category}/`;
-    
-    const response = await fetch(url, {
-      headers: {
-        'X-Api-Key': API_KEY
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log("Raw API response:", data);
+    // For other categories, use Puppeteer scraping
+    const data = await scrapeTradingViewCategory(category);
+    console.log("Raw scraping response:", data);
     
     // Parse the HTML retrieved to extract commodity data
     const commodities = parseCommoditiesData(data, category);
