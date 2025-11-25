@@ -353,11 +353,11 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
          />(\d{1,4}(?:[.,]\d{1,4})?)\s*USD[^<]*</i,  // ">310 USD<" ou ">310 USD</"
          /(\d{1,4}(?:[.,]\d{1,4})?)\s*USD/i,  // "310 USD" n'importe où
          // Pattern pour structure HTML: <div>310</div><div>USD</div>
-         />(\d{2,4})</[^>]*>[^<]*USD/i,  // Nombre dans un tag suivi de USD
+         />(\d{2,4})<\/[^>]*>[^<]*USD/i,  // Nombre dans un tag suivi de USD
          // Pattern pour prix avec séparateurs
          />(\d{1,3}(?:,\d{3})*(?:\.\d{1,4})?)\s*USD/i,  // "1,234.56 USD"
          // Pattern pour prix simple
-         />(\d{2,4})</[^<]*USD/i  // Nombre suivi de USD dans le contexte proche
+         />(\d{2,4})<\/[^<]*USD/i  // Nombre suivi de USD dans le contexte proche
        ];
        
        for (const pattern of mainPricePatterns) {
