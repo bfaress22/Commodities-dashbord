@@ -288,8 +288,9 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
        }
        
        const parsed = parseFloat(priceText) || 0;
-       // Validation: prix raisonnable pour freight (entre 1 et 50000)
-       if (parsed > 0 && parsed < 50000) {
+       // Validation: prix raisonnable pour freight (entre 50 et 50000 pour éviter les changements)
+       // Les changements sont généralement < 50, donc on filtre les petits nombres
+       if (parsed >= 50 && parsed < 50000) {
          return parsed;
        }
        return 0;
@@ -315,17 +316,24 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
        }
      }
      
-     // Si toujours pas trouvé, chercher dans tous les éléments texte
+     // Si toujours pas trouvé, chercher dans tous les éléments texte (mais éviter les petits nombres qui sont des changements)
      if (price === 0) {
        console.log(`Searching in all text elements for ${symbol}...`);
        const allElements = root.querySelectorAll('*');
-       for (let i = 0; i < Math.min(allElements.length, 100); i++) { // Limiter à 100 éléments pour performance
+       for (let i = 0; i < Math.min(allElements.length, 200); i++) { // Augmenté à 200 pour plus de couverture
          const element = allElements[i];
          const text = element.text.trim();
+         
+         // Ignorer les éléments qui contiennent probablement des changements (petits nombres, pourcentages)
+         if (text.includes('%') || text.includes('change') || text.match(/^[+-]?\d{1,2}(?:[.,]\d{1,2})?$/)) {
+           continue; // Skip les petits nombres qui sont probablement des changements
+         }
+         
          // Chercher des patterns de prix dans le texte
-         if (text && (text.includes('USD') || /^\d{1,4}(?:[.,]\d{1,4})?$/.test(text.replace(/[^\d.,]/g, '')))) {
+         if (text && (text.includes('USD') || /^\d{2,4}(?:[.,]\d{1,4})?$/.test(text.replace(/[^\d.,]/g, '')))) {
            const potentialPrice = parsePriceFromText(text);
-           if (potentialPrice > 0) {
+           // Validation stricte: prix doit être >= 50 pour éviter les changements
+           if (potentialPrice >= 50 && potentialPrice < 50000) {
              price = potentialPrice;
              console.log(`✅ Found price in text element for ${symbol}: ${price}`);
              break;
@@ -334,78 +342,112 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
        }
      }
      
-     // If no price found, search in general content with improved regex
+     // Recherche améliorée dans le HTML brut - cibler spécifiquement le prix principal
      if (price === 0) {
-       // Search for price patterns in HTML content - improved patterns for TradingView symbol pages
-       const pricePatterns = [
-         // Patterns spécifiques pour les pages de symboles TradingView
-         /<[^>]*>(\d{1,4}(?:[.,]\d{1,4})?)\s*USD/i,  // Prix suivi de USD dans un élément HTML
-         /(\d{1,4}(?:[.,]\d{1,4})?)\s*USD[^<]*</i,  // Prix avant USD suivi d'un tag
-         /price[^>]*>([^<]*(\d{1,4}(?:[.,]\d{1,4})?)[^<]*)</i,  // Dans un élément avec "price"
-         /(\d+\.\d{1,4})\s*USD/i,  // Match decimal prices like "23.1672 USD"
-         /(\d{1,3}(?:,\d{3})*\.\d{1,4})\s*USD/i,  // Match "1,234.5678 USD"
-         /(\d{1,3}(?:,\d{3})+)\s*USD/i,  // Match "9,564 USD" (thousands)
-         /(\d+)\s*USD/i,  // Match simple integers
-         // Patterns pour trouver le prix dans le texte visible (sans USD explicite)
-         /symbols\/NYMEX-[^/]+\/[^>]*>([^<]*(\d{1,4}(?:[.,]\d{1,4})?)[^<]*)</i,  // Près de l'URL du symbole
-         // Chercher dans les éléments avec des classes de prix
-         /class="[^"]*price[^"]*"[^>]*>([^<]*(\d{1,4}(?:[.,]\d{1,4})?)[^<]*)</i
+       console.log(`Searching for price in HTML content for ${symbol}...`);
+       
+       // Pattern 1: Chercher le prix principal (nombre suivi de USD, souvent dans un div ou span)
+       // Format typique: "310 USD" ou "310" suivi de "USD" dans un élément adjacent
+       const mainPricePatterns = [
+         // Pattern le plus spécifique: nombre suivi de USD dans un contexte de prix
+         />(\d{1,4}(?:[.,]\d{1,4})?)\s*USD[^<]*</i,  // ">310 USD<" ou ">310 USD</"
+         /(\d{1,4}(?:[.,]\d{1,4})?)\s*USD/i,  // "310 USD" n'importe où
+         // Pattern pour structure HTML: <div>310</div><div>USD</div>
+         />(\d{2,4})</[^>]*>[^<]*USD/i,  // Nombre dans un tag suivi de USD
+         // Pattern pour prix avec séparateurs
+         />(\d{1,3}(?:,\d{3})*(?:\.\d{1,4})?)\s*USD/i,  // "1,234.56 USD"
+         // Pattern pour prix simple
+         />(\d{2,4})</[^<]*USD/i  // Nombre suivi de USD dans le contexte proche
        ];
        
-       for (const pattern of pricePatterns) {
-         const priceMatch = htmlContent.match(pattern);
-         if (priceMatch) {
-           // Extraire le nombre du match
-           const numberMatch = priceMatch[0].match(/(\d{1,4}(?:[.,]\d{1,4})?)/);
-           if (numberMatch) {
-             let matchedPrice = numberMatch[1];
-             
-             // Apply same processing logic as above
-             if (matchedPrice.includes(',') && matchedPrice.includes('.')) {
-               const lastDotIndex = matchedPrice.lastIndexOf('.');
-               const lastCommaIndex = matchedPrice.lastIndexOf(',');
-               
-               if (lastDotIndex > lastCommaIndex) {
-                 matchedPrice = matchedPrice.replace(/,/g, '');
-               } else {
-                 matchedPrice = matchedPrice.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
-               }
-             } else if (matchedPrice.includes(',') && !matchedPrice.includes('.')) {
-               const parts = matchedPrice.split(',');
-               if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
-                 // Likely thousand separator (like "7,287")
-                 matchedPrice = matchedPrice.replace(/,/g, '');
-               } else if (parts.length === 2 && parts[1].length <= 4) {
-                 // Likely decimal separator (like "12,34")
-                 matchedPrice = matchedPrice.replace(',', '.');
-               } else {
-                 matchedPrice = matchedPrice.replace(/,/g, '');
-               }
-             }
-             
-             price = parseFloat(matchedPrice) || 0;
-             if (price > 0 && price < 100000) { // Validation: prix raisonnable
-               console.log(`Found price in content for ${symbol}: ${price}`);
-               break;
-             }
+       for (const pattern of mainPricePatterns) {
+         const matches = htmlContent.match(pattern);
+         if (matches && matches[1]) {
+           let matchedPrice = matches[1];
+           console.log(`Found potential price match for ${symbol}: "${matchedPrice}"`);
+           
+           // Nettoyer et parser
+           matchedPrice = matchedPrice.replace(/,/g, '');
+           const parsedPrice = parseFloat(matchedPrice);
+           
+           // Validation: prix raisonnable pour freight (entre 1 et 50000)
+           if (parsedPrice > 0 && parsedPrice < 50000 && parsedPrice >= 1) {
+             price = parsedPrice;
+             console.log(`✅ Found main price in HTML for ${symbol}: ${price}`);
+             break;
            }
          }
        }
        
-       // Dernière tentative: chercher tous les nombres dans le HTML et prendre le plus probable
+       // Pattern 2: Chercher dans les scripts JSON (TradingView stocke souvent les données là)
        if (price === 0) {
-         console.log(`Trying last resort: searching all numbers in HTML for ${symbol}`);
-         // Chercher des nombres qui ressemblent à des prix (entre 1 et 99999, avec ou sans décimales)
-         const allNumbers = htmlContent.match(/\b(\d{1,3}(?:[.,]\d{1,4})?)\b/g);
+         console.log(`Searching in script tags for ${symbol}...`);
+         const scriptTags = root.querySelectorAll('script');
+         for (const script of scriptTags) {
+           const scriptContent = script.innerHTML;
+           // Chercher des objets JSON avec des données de prix
+           const jsonPricePatterns = [
+             /"price"\s*:\s*(\d+(?:\.\d+)?)/i,
+             /"last_price"\s*:\s*(\d+(?:\.\d+)?)/i,
+             /"value"\s*:\s*(\d+(?:\.\d+)?)/i,
+             /price.*?(\d{2,4})/i
+           ];
+           
+           for (const pattern of jsonPricePatterns) {
+             const match = scriptContent.match(pattern);
+             if (match && match[1]) {
+               const parsedPrice = parseFloat(match[1]);
+               if (parsedPrice > 0 && parsedPrice < 50000 && parsedPrice >= 1) {
+                 price = parsedPrice;
+                 console.log(`✅ Found price in script JSON for ${symbol}: ${price}`);
+                 break;
+               }
+             }
+           }
+           if (price > 0) break;
+         }
+       }
+       
+       // Pattern 3: Chercher tous les nombres proches de "USD" dans le HTML
+       if (price === 0) {
+         console.log(`Trying comprehensive number search near USD for ${symbol}...`);
+         // Chercher tous les nombres dans un contexte de 200 caractères autour de "USD"
+         const usdContextPattern = /.{0,200}(\d{2,4}(?:[.,]\d{1,4})?).{0,200}USD/i;
+         const contextMatch = htmlContent.match(usdContextPattern);
+         if (contextMatch && contextMatch[1]) {
+           let matchedPrice = contextMatch[1].replace(/,/g, '');
+           const parsedPrice = parseFloat(matchedPrice);
+           if (parsedPrice > 0 && parsedPrice < 50000 && parsedPrice >= 1) {
+             price = parsedPrice;
+             console.log(`✅ Found price near USD context for ${symbol}: ${price}`);
+           }
+         }
+       }
+       
+       // Dernière tentative: chercher le plus grand nombre raisonnable dans le HTML
+       if (price === 0) {
+         console.log(`Last resort: searching all reasonable numbers for ${symbol}...`);
+         // Chercher tous les nombres entre 10 et 50000 (plage raisonnable pour freight)
+         const allNumbers = htmlContent.match(/\b(\d{2,5}(?:\.\d{1,4})?)\b/g);
          if (allNumbers) {
+           const candidates: number[] = [];
            for (const numStr of allNumbers) {
-             let cleanNum = numStr.replace(',', '.');
-             const num = parseFloat(cleanNum);
-             // Un prix de freight est généralement entre 1 et 50000
-             if (num > 0 && num < 50000 && num % 1 !== 0 || (num >= 1 && num <= 50000)) {
-               price = num;
-               console.log(`Found potential price in HTML for ${symbol}: ${price}`);
-               break;
+             const num = parseFloat(numStr);
+             // Filtrer les nombres raisonnables (éviter les années, codes, etc.)
+             if (num >= 10 && num < 50000 && num % 1 === 0) { // Entiers uniquement pour cette tentative
+               candidates.push(num);
+             }
+           }
+           // Prendre le nombre le plus élevé qui est raisonnable (probablement le prix)
+           if (candidates.length > 0) {
+             candidates.sort((a, b) => b - a);
+             // Prendre le plus grand nombre qui n'est pas trop grand (probablement le prix principal)
+             for (const candidate of candidates) {
+               if (candidate >= 50 && candidate < 50000) { // Prix freight typique entre 50 et 50000
+                 price = candidate;
+                 console.log(`✅ Found price candidate for ${symbol}: ${price}`);
+                 break;
+               }
              }
            }
          }
