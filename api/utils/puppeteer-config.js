@@ -46,14 +46,30 @@ export async function setupPage(page) {
 
 export async function smartWait(page, url) {
   if (url.includes('tradingview.com')) {
-    // Pour TradingView, attendre les tableaux spécifiquement
-    try {
-      await page.waitForSelector('table, tr, .tv-data-table, [data-rowid]', { timeout: 8000 });
-      console.log('TradingView content detected, waiting 2s more...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    } catch (error) {
-      console.log('TradingView selectors timeout, proceeding with fixed wait...');
-      await new Promise(resolve => setTimeout(resolve, 3000));
+    // Détecter si c'est une page de symbole individuel ou une page de catégorie
+    const isSymbolPage = url.includes('/symbols/') && !url.includes('/markets/');
+    
+    if (isSymbolPage) {
+      // Pour les pages de symboles individuels, attendre le contenu principal
+      try {
+        // Attendre que le contenu principal soit chargé (plusieurs sélecteurs possibles)
+        await page.waitForSelector('h1, [class*="symbol"], [class*="price"], main', { timeout: 8000 });
+        console.log('TradingView symbol page content detected, waiting 3s for price to load...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      } catch (error) {
+        console.log('TradingView symbol selectors timeout, proceeding with fixed wait...');
+        await new Promise(resolve => setTimeout(resolve, 4000));
+      }
+    } else {
+      // Pour les pages de catégories, attendre les tableaux spécifiquement
+      try {
+        await page.waitForSelector('table, tr, .tv-data-table, [data-rowid]', { timeout: 8000 });
+        console.log('TradingView category content detected, waiting 2s more...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (error) {
+        console.log('TradingView category selectors timeout, proceeding with fixed wait...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
     }
   } else if (url.includes('shipandbunker.com')) {
     // Pour Ship & Bunker, attendre les tables de prix

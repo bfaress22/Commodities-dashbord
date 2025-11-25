@@ -1,4 +1,4 @@
-import { getBrowser, setupPage, smartWait, setCorsHeaders } from '../utils/puppeteer-config.js';
+import { getBrowser, setupPage, smartWait, setCorsHeaders } from '../../utils/puppeteer-config.js';
 
 export default async function handler(req, res) {
   setCorsHeaders(res);
