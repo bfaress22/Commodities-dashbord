@@ -491,15 +491,20 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
 async function fetchFreightData(): Promise<Commodity[]> {
   console.log('Fetching freight data from individual symbol pages...');
   
-  // Limit to 10 symbols in parallel to avoid API overload
-  const batchSize = 5;
+  // Réduire la taille du batch pour Vercel (limites de timeout)
+  const batchSize = 3; // Réduit de 5 à 3 pour éviter les timeouts sur Vercel
   const results: Commodity[] = [];
   
   for (let i = 0; i < FREIGHT_SYMBOLS.length; i += batchSize) {
     const batch = FREIGHT_SYMBOLS.slice(i, i + batchSize);
     
+    console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(FREIGHT_SYMBOLS.length / batchSize)}: ${batch.map(b => b.symbol).join(', ')}`);
+    
     const batchPromises = batch.map(({ symbol, name, type }) => 
-      fetchFreightSymbolData(symbol, name, type)
+      fetchFreightSymbolData(symbol, name, type).catch(error => {
+        console.error(`Error fetching ${symbol}:`, error);
+        return null; // Retourner null au lieu de throw pour éviter de bloquer tout le batch
+      })
     );
     
     const batchResults = await Promise.allSettled(batchPromises);
@@ -507,18 +512,28 @@ async function fetchFreightData(): Promise<Commodity[]> {
     batchResults.forEach((result, index) => {
       if (result.status === 'fulfilled' && result.value) {
         results.push(result.value);
+        console.log(`✅ Successfully fetched ${batch[index].symbol}`);
       } else {
-        console.warn(`Failed to fetch ${batch[index].symbol}:`, result.status === 'rejected' ? result.reason : 'No data');
+        const errorMsg = result.status === 'rejected' 
+          ? result.reason?.message || result.reason 
+          : 'No data returned';
+        console.warn(`❌ Failed to fetch ${batch[index].symbol}:`, errorMsg);
       }
     });
     
-    // Small delay between batches to respect API limits
+    // Délai entre batches pour respecter les limites API et éviter les timeouts Vercel
     if (i + batchSize < FREIGHT_SYMBOLS.length) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 1500)); // Augmenté à 1.5s pour Vercel
     }
   }
   
-  console.log(`Successfully fetched ${results.length} freight commodities`);
+  console.log(`Successfully fetched ${results.length}/${FREIGHT_SYMBOLS.length} freight commodities`);
+  
+  // Si aucun résultat, lancer une erreur pour que le cache ne soit pas sauvegardé avec des données vides
+  if (results.length === 0) {
+    throw new Error('No freight data could be fetched. All requests failed.');
+  }
+  
   return results;
 }
 
@@ -1461,3 +1476,4 @@ function parseCommoditiesData(data: any, category: CommodityCategory): Commodity
     throw error;
   }
 }
+
