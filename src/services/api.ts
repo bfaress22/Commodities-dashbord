@@ -237,6 +237,9 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
     
     console.log(`Parsing HTML for ${symbol} (${htmlContent.length} chars)`);
     
+    // Nombres à exclure explicitement (IDs, timestamps, codes, etc.) - déclaré une seule fois
+    const excludedNumbers = [20000, 2000, 10000, 50000, 9999, 8888, 7777, 2024, 2025, 1999, 2001];
+    
     // Search for price elements in different possible selectors (amélioré pour pages de symboles)
     const priceSelectors = [
       // Sélecteurs spécifiques TradingView
@@ -288,15 +291,15 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
        }
        
        const parsed = parseFloat(priceText) || 0;
-       // Validation: prix raisonnable pour freight (entre 50 et 50000 pour éviter les changements)
-       // Les changements sont généralement < 50, donc on filtre les petits nombres
-       if (parsed >= 50 && parsed < 50000) {
+       // Validation: prix raisonnable pour freight (entre 50 et 5000 pour éviter les IDs comme 20000)
+       // Exclure explicitement les nombres suspects
+       if (parsed >= 50 && parsed < 5000 && !excludedNumbers.includes(parsed)) {
          return parsed;
        }
        return 0;
      };
      
-     // Essayer les sélecteurs CSS spécifiques
+     // Essayer les sélecteurs CSS spécifiques (excludedNumbers déjà déclaré plus haut)
      for (const selector of priceSelectors.slice(0, 5)) { // Limiter aux 5 premiers pour éviter trop de résultats
        try {
          const priceElement = root.querySelector(selector);
@@ -304,11 +307,15 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
            const rawPriceText = priceElement.text.trim();
            console.log(`Raw price text for ${symbol} (${selector}): "${rawPriceText.substring(0, 50)}"`);
            
-           price = parsePriceFromText(rawPriceText);
+           const potentialPrice = parsePriceFromText(rawPriceText);
            
-           if (price > 0) {
+           // Validation stricte: exclure les nombres suspects
+           if (potentialPrice > 0 && !excludedNumbers.includes(potentialPrice) && potentialPrice < 5000) {
+             price = potentialPrice;
              console.log(`✅ Successfully parsed price for ${symbol} from ${selector}: ${price}`);
              break;
+           } else if (potentialPrice > 0) {
+             console.log(`Rejected price ${potentialPrice} from ${selector} (excluded or out of range)`);
            }
          }
        } catch (e) {
@@ -332,8 +339,8 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
          // Chercher des patterns de prix dans le texte
          if (text && (text.includes('USD') || /^\d{2,4}(?:[.,]\d{1,4})?$/.test(text.replace(/[^\d.,]/g, '')))) {
            const potentialPrice = parsePriceFromText(text);
-           // Validation stricte: prix doit être >= 50 pour éviter les changements
-           if (potentialPrice >= 50 && potentialPrice < 50000) {
+           // Validation stricte: prix doit être >= 50 et < 5000, exclure les nombres suspects
+           if (potentialPrice >= 50 && potentialPrice < 5000 && !excludedNumbers.includes(potentialPrice)) {
              price = potentialPrice;
              console.log(`✅ Found price in text element for ${symbol}: ${price}`);
              break;
@@ -345,6 +352,8 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
      // Recherche améliorée dans le HTML brut - cibler spécifiquement le prix principal
      if (price === 0) {
        console.log(`Searching for price in HTML content for ${symbol}...`);
+       
+       // excludedNumbers déjà déclaré plus haut
        
        // Pattern 1: Chercher le prix principal (nombre suivi de USD, souvent dans un div ou span)
        // Format typique: "310 USD" ou "310" suivi de "USD" dans un élément adjacent
@@ -370,12 +379,13 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
            matchedPrice = matchedPrice.replace(/,/g, '');
            const parsedPrice = parseFloat(matchedPrice);
            
-           // Validation: prix raisonnable pour freight (entre 50 et 5000 pour éviter les IDs comme 20000)
-           // Exclure explicitement 20000 qui est probablement un ID ou autre donnée
-           if (parsedPrice >= 50 && parsedPrice < 5000 && parsedPrice !== 20000) {
+           // Validation: prix raisonnable pour freight (entre 1 et 50000) ET exclure les nombres suspects
+           if (parsedPrice > 0 && parsedPrice < 50000 && parsedPrice >= 1 && !excludedNumbers.includes(parsedPrice)) {
              price = parsedPrice;
              console.log(`✅ Found main price in HTML for ${symbol}: ${price}`);
              break;
+           } else {
+             console.log(`Rejected price candidate ${parsedPrice} (excluded or out of range)`);
            }
          }
        }
@@ -384,6 +394,8 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
        if (price === 0) {
          console.log(`Searching in script tags for ${symbol}...`);
          const scriptTags = root.querySelectorAll('script');
+         // excludedNumbers déjà déclaré plus haut
+         
          for (const script of scriptTags) {
            const scriptContent = script.innerHTML;
            // Chercher des objets JSON avec des données de prix
@@ -398,8 +410,7 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
              const match = scriptContent.match(pattern);
              if (match && match[1]) {
                const parsedPrice = parseFloat(match[1]);
-               // Exclure 20000 et les nombres trop grands
-               if (parsedPrice >= 50 && parsedPrice < 5000 && parsedPrice !== 20000) {
+               if (parsedPrice > 0 && parsedPrice < 50000 && parsedPrice >= 1 && !excludedNumbers.includes(parsedPrice)) {
                  price = parsedPrice;
                  console.log(`✅ Found price in script JSON for ${symbol}: ${price}`);
                  break;
@@ -410,26 +421,42 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
          }
        }
        
-       // Pattern 3: Chercher tous les nombres proches de "USD" dans le HTML
+       // Pattern 3: Chercher tous les nombres proches de "USD" dans le HTML (priorité aux nombres raisonnables)
        if (price === 0) {
          console.log(`Trying comprehensive number search near USD for ${symbol}...`);
+         // excludedNumbers déjà déclaré plus haut
+         
          // Chercher tous les nombres dans un contexte de 200 caractères autour de "USD"
          const usdContextPattern = /.{0,200}(\d{2,4}(?:[.,]\d{1,4})?).{0,200}USD/i;
-         const contextMatch = htmlContent.match(usdContextPattern);
-         if (contextMatch && contextMatch[1]) {
-           let matchedPrice = contextMatch[1].replace(/,/g, '');
-           const parsedPrice = parseFloat(matchedPrice);
-           // Exclure 20000 et les nombres trop grands
-           if (parsedPrice >= 50 && parsedPrice < 5000 && parsedPrice !== 20000) {
-             price = parsedPrice;
-             console.log(`✅ Found price near USD context for ${symbol}: ${price}`);
+         const allUsdMatches = htmlContent.matchAll(new RegExp(usdContextPattern.source, 'gi'));
+         
+         const candidates: { price: number; context: string }[] = [];
+         for (const match of allUsdMatches) {
+           if (match[1]) {
+             let matchedPrice = match[1].replace(/,/g, '');
+             const parsedPrice = parseFloat(matchedPrice);
+             
+             // Filtrer les candidats valides
+             if (parsedPrice > 0 && parsedPrice < 50000 && parsedPrice >= 1 && !excludedNumbers.includes(parsedPrice)) {
+               const context = match[0].substring(0, 100);
+               candidates.push({ price: parsedPrice, context });
+             }
            }
+         }
+         
+         // Si plusieurs candidats, prendre le plus petit nombre raisonnable (probablement le prix, pas un ID)
+         if (candidates.length > 0) {
+           candidates.sort((a, b) => a.price - b.price); // Plus petit en premier
+           price = candidates[0].price;
+           console.log(`✅ Found price near USD context for ${symbol}: ${price} (from ${candidates.length} candidates)`);
          }
        }
        
-       // Dernière tentative: chercher le prix le plus probable (éviter les nombres trop grands comme 20000)
+       // Dernière tentative: chercher le prix le plus probable (éviter les nombres suspects comme 20000)
        if (price === 0) {
          console.log(`Last resort: searching all reasonable numbers for ${symbol}...`);
+         // excludedNumbers déjà déclaré plus haut
+         
          // Chercher tous les nombres dans un contexte spécifique (proche de USD, dans des divs de prix, etc.)
          const priceContextPatterns = [
            // Chercher des nombres dans des éléments qui pourraient contenir le prix
@@ -445,7 +472,7 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
              let matchedPrice = matches[1].replace(/,/g, '');
              const parsedPrice = parseFloat(matchedPrice);
              // Prix freight typique: entre 50 et 5000 (éviter 20000 qui est probablement un ID)
-             if (parsedPrice >= 50 && parsedPrice < 5000) {
+             if (parsedPrice >= 50 && parsedPrice < 5000 && !excludedNumbers.includes(parsedPrice)) {
                price = parsedPrice;
                console.log(`✅ Found price in context pattern for ${symbol}: ${price}`);
                break;
@@ -464,8 +491,8 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
                const numStr = allNumbers[i];
                const num = parseFloat(numStr);
                
-               // Exclure explicitement 20000 et les nombres trop grands
-               if (num === 20000 || num >= 10000) {
+               // Exclure explicitement 20000 et les nombres suspects
+               if (excludedNumbers.includes(num) || num >= 10000) {
                  continue; // Skip les nombres suspects
                }
                
@@ -482,13 +509,13 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
                }
              }
              
-             // Trier par priorité (proximité de USD) puis par valeur
+             // Trier par priorité (proximité de USD) puis par valeur (plus petit = probablement le prix)
              candidates.sort((a, b) => {
                const aHasUsd = a.context.toLowerCase().includes('usd');
                const bHasUsd = b.context.toLowerCase().includes('usd');
                if (aHasUsd && !bHasUsd) return -1;
                if (!aHasUsd && bHasUsd) return 1;
-               return b.num - a.num; // Plus grand en premier
+               return a.num - b.num; // Plus petit en premier (éviter les IDs)
              });
              
              // Prendre le premier candidat valide
