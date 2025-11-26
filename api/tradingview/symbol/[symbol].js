@@ -1,26 +1,7 @@
-import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
-
-// Configuration pour l'environnement serverless
-const isDev = !process.env.AWS_REGION;
-
-async function getBrowser() {
-  return puppeteer.launch({
-    args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
-    executablePath: isDev 
-      ? undefined // Utilise l'installation locale en développement
-      : await chromium.executablePath(),
-    headless: chromium.headless,
-    ignoreHTTPSErrors: true,
-  });
-}
+import { getBrowser, setupPage, smartWait, setCorsHeaders } from '../utils/puppeteer-config.js';
 
 export default async function handler(req, res) {
-  // Configurer CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -42,37 +23,32 @@ export default async function handler(req, res) {
   let page = null;
 
   try {
-    console.log(`Scraping TradingView symbol: ${symbol}`);
+    console.log(`Fast scraping TradingView symbol: ${symbol}`);
     
     browser = await getBrowser();
     page = await browser.newPage();
     
-    // Configuration de la page
-    await page.setViewport({ width: 1920, height: 1080 });
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+    // Configuration optimisée de la page
+    await setupPage(page);
     
-    // Naviguer vers la page
+    // Naviguer vers la page avec timeout réduit
     console.log(`Navigating to: ${url}`);
     await page.goto(url, { 
       waitUntil: 'domcontentloaded',
-      timeout: 30000 
+      timeout: 20000 // Timeout réduit
     });
     console.log('TradingView symbol page loaded successfully');
     
-    // Attendre intelligemment que le contenu se charge
-    console.log('Waiting for TradingView symbol content to render...');
-    
-    // Attendre spécifiquement les éléments de prix (plus fiable)
+    // Attente intelligente optimisée pour les pages de symboles
     try {
-      await page.waitForSelector('[data-qa-id="symbol-last-value"], .js-symbol-last', { timeout: 10000 });
-      console.log('Price elements detected, waiting 2s more for full render...');
+      // Attendre que le prix soit chargé
+      await page.waitForSelector('.js-symbol-last[data-qa-id="symbol-last-value"], [data-symbol]', { timeout: 8000 });
+      console.log('Symbol price content detected, waiting 2s more...');
       await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (error) {
-      console.log('Price selectors timeout, using fixed wait...');
-      await new Promise(resolve => setTimeout(resolve, 4000));
+      console.log('Symbol selectors timeout, proceeding with fixed wait...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
-    
-    console.log('Wait completed');
     
     // Extraire le HTML
     const html = await page.content();
