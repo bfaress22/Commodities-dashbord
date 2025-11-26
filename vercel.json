@@ -2,6 +2,9 @@
   "functions": {
     "api/**/*.js": {
       "maxDuration": 30
+    },
+    "api/tradingview/freight.js": {
+      "maxDuration": 60
     }
   },
   "regions": ["iad1"],

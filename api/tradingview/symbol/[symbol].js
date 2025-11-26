@@ -1,4 +1,4 @@
-import { getBrowser, setupPage, smartWait, setCorsHeaders } from '../../utils/puppeteer-config.js';
+import { getBrowser, setupPage, setCorsHeaders } from '../../utils/puppeteer-config.js';
 
 export default async function handler(req, res) {
   setCorsHeaders(res);
@@ -23,24 +23,34 @@ export default async function handler(req, res) {
   let page = null;
 
   try {
-    console.log(`Scraping TradingView symbol: ${symbol}`);
+    console.log(`Fast scraping TradingView symbol: ${symbol}`);
     
     browser = await getBrowser();
     page = await browser.newPage();
     
-    // Configuration optimisée de la page (bloque les ressources lourdes)
+    // Configuration optimisée de la page (blocage ressources inutiles)
     await setupPage(page);
     
-    // Naviguer vers la page avec timeout aligné sur les autres routes
+    // Naviguer vers la page avec timeout réduit
     console.log(`Navigating to: ${url}`);
     await page.goto(url, { 
       waitUntil: 'domcontentloaded',
-      timeout: 20000 
+      timeout: 15000  // Timeout réduit de 30s à 15s
     });
     console.log('TradingView symbol page loaded successfully');
     
-    // Attente intelligente basée sur le type de site (TradingView)
-    await smartWait(page, url);
+    // Attente intelligente - attendre le prix principal
+    try {
+      await page.waitForSelector('[class*="price"], [class*="quote"], [class*="value"]', { 
+        timeout: 5000 
+      });
+      console.log('Price element detected');
+      // Court délai additionnel pour le rendu
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    } catch (e) {
+      console.log('Price selector timeout, using fixed wait...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
     
     // Extraire le HTML
     const html = await page.content();
