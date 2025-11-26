@@ -342,15 +342,21 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
     }
     
     // MÉTHODE 2: Sélecteurs CSS dynamiques de TradingView (classes avec suffixes hash)
+    // ⭐ PRIORITÉ: Sélecteurs les plus fiables identifiés via analyse de la page
     const priceSelectors = [
-      // Sélecteurs avec wildcards pour classes dynamiques TradingView
+      // ⭐⭐⭐ Sélecteurs PRIORITAIRES (les plus fiables)
+      '[data-qa-id="symbol-last-value"]',  // Le plus fiable - identifié sur la page CS21!
+      '.last-zoF9r75I.js-symbol-last[data-qa-id="symbol-last-value"]',  // Version complète
+      '.js-symbol-last[data-qa-id="symbol-last-value"]',  // Version alternative
+      '.last-zoF9r75I.js-symbol-last',  // Classe spécifique TradingView
+      // ⭐⭐ Sélecteurs secondaires
+      '.js-symbol-last',  // Sélecteur général mais fiable
       '[class*="lastContainer"]',
       '[class*="last-"][class*="js-symbol-last"]',
       '[class*="last-"]',
-      '[class*="price-quote"]',
-      '.js-symbol-last',
       '[data-symbol] [class*="last"]',
-      // Sélecteurs spécifiques TradingView legacy
+      // ⭐ Sélecteurs de fallback
+      '[class*="price-quote"]',
       '.tv-symbol-price-quote__value',
       '[data-field="last_price"]',
       '.tv-symbol-header__price',
@@ -704,10 +710,16 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
      }
     
          // Extract changes
+     // ⭐ Sélecteurs améliorés basés sur l'analyse de la page TradingView
      const changeSelectors = [
+       // ⭐⭐⭐ Sélecteurs PRIORITAIRES (les plus fiables)
+       '.js-symbol-change-pt',  // Pourcentage de changement (le plus fiable)
+       '.js-symbol-change',  // Changement général
+       '.changeValue-YkSXtXEf',  // Valeur de changement spécifique
+       '[class*="change"][class*="percent"]',  // Éléments avec changement et pourcentage
+       // ⭐ Sélecteurs de fallback
        '.tv-symbol-price-quote__change',
        '[data-field="change"]',
-       '.js-symbol-change',
        '[class*="change"]'
      ];
      
@@ -715,7 +727,7 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
        const changeElement = root.querySelector(selector);
        if (changeElement) {
          const rawChangeText = changeElement.text.trim();
-         console.log(`Raw change text for ${symbol}: "${rawChangeText}"`);
+         console.log(`Raw change text for ${symbol} (${selector}): "${rawChangeText}"`);
          
          // Function to parse a number with separators
          const parseNumber = (numStr: string): number => {
@@ -728,6 +740,9 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
            // Remove signs and spaces
            let cleanNum = numStr.replace(/^[+-−]\s*/, '');
            
+           // Remove % sign if present
+           cleanNum = cleanNum.replace(/%/g, '');
+           
            // Apply same logic as price parsing
            if (cleanNum.includes(',') && cleanNum.includes('.')) {
              const lastDotIndex = cleanNum.lastIndexOf('.');
@@ -738,7 +753,7 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
              } else {
                cleanNum = cleanNum.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
              }
-                       } else if (cleanNum.includes(',') && !cleanNum.includes('.')) {
+           } else if (cleanNum.includes(',') && !cleanNum.includes('.')) {
               const parts = cleanNum.split(',');
               if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
                 // Likely thousand separator (like "7,287")
@@ -755,18 +770,30 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
            return isNegative ? -result : result;
          };
          
-         // Extract absolute change (without %)
-         const absoluteMatch = rawChangeText.match(/([+-−]?\s*\d+(?:[,\.]\d+)*)\s*(?!\%)/);
-         if (absoluteMatch) {
-           absoluteChange = parseNumber(absoluteMatch[1]);
-           console.log(`Parsed absolute change for ${symbol}: ${absoluteChange}`);
-         }
-         
-         // Extract percent change
-         const percentMatch = rawChangeText.match(/([+-−]?\s*\d+(?:[,\.]\d+)*)\s*%/);
-         if (percentMatch) {
-           percentChange = parseNumber(percentMatch[1]);
-           console.log(`Parsed percent change for ${symbol}: ${percentChange}`);
+         // ⭐ Si c'est le sélecteur de pourcentage, extraire directement le %
+         if (selector.includes('change-pt') || selector.includes('percent')) {
+           percentChange = parseNumber(rawChangeText);
+           console.log(`✅ Parsed percent change for ${symbol} from ${selector}: ${percentChange}%`);
+           
+           // Calculer le changement absolu à partir du pourcentage si on a le prix
+           if (price > 0 && percentChange !== 0) {
+             absoluteChange = (price * percentChange) / 100;
+             console.log(`Calculated absolute change for ${symbol}: ${absoluteChange}`);
+           }
+         } else {
+           // Extract absolute change (without %)
+           const absoluteMatch = rawChangeText.match(/([+-−]?\s*\d+(?:[,\.]\d+)*)\s*(?!\%)/);
+           if (absoluteMatch) {
+             absoluteChange = parseNumber(absoluteMatch[1]);
+             console.log(`Parsed absolute change for ${symbol}: ${absoluteChange}`);
+           }
+           
+           // Extract percent change
+           const percentMatch = rawChangeText.match(/([+-−]?\s*\d+(?:[,\.]\d+)*)\s*%/);
+           if (percentMatch) {
+             percentChange = parseNumber(percentMatch[1]);
+             console.log(`Parsed percent change for ${symbol}: ${percentChange}%`);
+           }
          }
          
          if (absoluteChange !== 0 || percentChange !== 0) break;

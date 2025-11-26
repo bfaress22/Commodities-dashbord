@@ -59,9 +59,19 @@ export default async function handler(req, res) {
     });
     console.log('TradingView symbol page loaded successfully');
     
-    // Attendre que le contenu se charge
+    // Attendre intelligemment que le contenu se charge
     console.log('Waiting for TradingView symbol content to render...');
-    await new Promise(resolve => setTimeout(resolve, 6000));
+    
+    // Attendre spécifiquement les éléments de prix (plus fiable)
+    try {
+      await page.waitForSelector('[data-qa-id="symbol-last-value"], .js-symbol-last', { timeout: 10000 });
+      console.log('Price elements detected, waiting 2s more for full render...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } catch (error) {
+      console.log('Price selectors timeout, using fixed wait...');
+      await new Promise(resolve => setTimeout(resolve, 4000));
+    }
+    
     console.log('Wait completed');
     
     // Extraire le HTML

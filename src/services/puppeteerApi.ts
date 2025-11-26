@@ -3,12 +3,8 @@ interface ScrapingResult {
 }
 
 // Configuration pour les différents environnements
-// En développement local avec vercel dev: utilise localhost:3000
-// En production Vercel: utilise les routes relatives
-// Pour npm run dev seul: utilise les routes relatives (fonctionnera si vercel dev est lancé en parallèle)
-const isDev = import.meta.env.DEV;
-const isVercelDev = typeof window !== 'undefined' && window.location.port === '3000';
-const SCRAPING_SERVER_URL = isVercelDev ? '' : (isDev ? '' : ''); // Toujours utiliser routes relatives
+const isDev = process.env.NODE_ENV === 'development';
+const SCRAPING_SERVER_URL = isDev ? 'http://localhost:3000' : ''; // En production, utilise les API routes Vercel relatives
 const API_KEY = ''; // Fallback API key
 
 /**
