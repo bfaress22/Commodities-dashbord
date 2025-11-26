@@ -31,12 +31,23 @@ export default async function handler(req, res) {
     // Configuration optimisée de la page
     await setupPage(page);
     
-    // Naviguer vers la page avec timeout réduit
+    // Naviguer vers la page avec stratégie améliorée pour Cloudflare
     console.log(`Navigating to: ${url}`);
     await page.goto(url, { 
-      waitUntil: 'domcontentloaded',
-      timeout: 20000 // Timeout réduit
+      waitUntil: 'networkidle2', // Meilleur pour Cloudflare
+      timeout: 60000 // Timeout plus long pour Cloudflare
     });
+    
+    // Vérifier si on est bloqué par Cloudflare
+    const initialContent = await page.content();
+    if (initialContent.includes('Just one more step') || 
+        initialContent.includes('Security check') ||
+        initialContent.includes('Checking your browser')) {
+      console.log('Cloudflare challenge detected, waiting for validation...');
+      await new Promise(resolve => setTimeout(resolve, 12000));
+      await page.reload({ waitUntil: 'networkidle2', timeout: 60000 });
+    }
+    
     console.log('TradingView page loaded successfully');
     
     // Attente intelligente optimisée
@@ -44,6 +55,13 @@ export default async function handler(req, res) {
     
     // Extraire le HTML
     const html = await page.content();
+    
+    // Vérifier à nouveau si on a été bloqué après le chargement
+    if (html.includes('Just one more step') || 
+        html.includes('Security check') ||
+        html.includes('Checking your browser')) {
+      throw new Error('Blocked by Cloudflare after content load');
+    }
     
     console.log(`Successfully scraped TradingView ${category}: ${html.length} characters`);
     
