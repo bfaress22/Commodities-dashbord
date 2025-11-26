@@ -3,8 +3,12 @@ interface ScrapingResult {
 }
 
 // Configuration pour les différents environnements
-const isDev = process.env.NODE_ENV === 'development';
-const SCRAPING_SERVER_URL = isDev ? 'http://localhost:3000' : ''; // En production, utilise les API routes Vercel relatives
+// En développement local avec vercel dev: utilise localhost:3000
+// En production Vercel: utilise les routes relatives
+// Pour npm run dev seul: utilise les routes relatives (fonctionnera si vercel dev est lancé en parallèle)
+const isDev = import.meta.env.DEV;
+const isVercelDev = typeof window !== 'undefined' && window.location.port === '3000';
+const SCRAPING_SERVER_URL = isVercelDev ? '' : (isDev ? '' : ''); // Toujours utiliser routes relatives
 const API_KEY = ''; // Fallback API key
 
 /**
@@ -184,56 +188,5 @@ export async function scrapeShipAndBunkerEMEA(): Promise<ScrapingResult> {
     // Fallback vers la fonction générique ou API Ninja
     const url = 'https://shipandbunker.com/prices/emea';
     return scrapePage(url);
-  }
-}
-
-/**
- * Interface pour les données freight directement parsées
- */
-interface FreightCommodity {
-  symbol: string;
-  name: string;
-  price: number;
-  change: number;
-  changePercent: number;
-  high: number;
-  low: number;
-  type: string;
-  category: string;
-}
-
-interface FreightApiResponse {
-  success: boolean;
-  count: number;
-  duration: number;
-  data: FreightCommodity[];
-}
-
-/**
- * Récupère les données freight via l'API optimisée
- * Retourne directement les données parsées (pas du HTML)
- */
-export async function fetchFreightDataFromApi(): Promise<FreightApiResponse | null> {
-  try {
-    console.log('Fetching freight data via optimized API...');
-    
-    const apiUrl = `${SCRAPING_SERVER_URL}/api/tradingview/freight`;
-    
-    const response = await fetch(apiUrl, {
-      timeout: 60000 // 60 secondes pour permettre le scraping de tous les symboles
-    } as any);
-    
-    if (!response.ok) {
-      throw new Error(`Vercel function error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    console.log(`Successfully fetched freight data: ${data.count} commodities in ${data.duration}ms`);
-    
-    return data;
-    
-  } catch (error) {
-    console.error('Failed to fetch freight data from API:', error);
-    return null;
   }
 } 
