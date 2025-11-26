@@ -249,13 +249,17 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
         if (jsonData['@type'] === 'FAQPage' && jsonData.mainEntity) {
           for (const faq of jsonData.mainEntity) {
             if (faq.acceptedAnswer && faq.acceptedAnswer.text) {
-              // Chercher le prix dans la réponse (format: "Le cours actuel de CS21! est de 310 USD")
-              const priceMatch = faq.acceptedAnswer.text.match(/(\d{1,5}(?:[.,]\d{1,4})?)\s*USD/i);
+              // Chercher le prix dans la réponse
+              // Format américain: "7,287 USD" (virgule = séparateur de milliers)
+              // Format européen: "7.287 USD" ou "310 USD"
+              const priceMatch = faq.acceptedAnswer.text.match(/is\s+(\d{1,3}(?:,\d{3})*(?:\.\d{1,4})?|\d+(?:\.\d{1,4})?)\s*USD/i);
               if (priceMatch) {
-                const parsedPrice = parseFloat(priceMatch[1].replace(',', '.'));
-                if (parsedPrice > 0 && parsedPrice < 50000 && !excludedNumbers.includes(parsedPrice)) {
+                // Supprimer les virgules (séparateur de milliers format US)
+                const cleanPrice = priceMatch[1].replace(/,/g, '');
+                const parsedPrice = parseFloat(cleanPrice);
+                if (parsedPrice > 0 && parsedPrice < 100000 && !excludedNumbers.includes(parsedPrice)) {
                   price = parsedPrice;
-                  console.log(`✅ Found price in JSON-LD FAQ for ${symbol}: ${price}`);
+                  console.log(`✅ Found price in JSON-LD FAQ for ${symbol}: ${price} (raw: ${priceMatch[1]})`);
                   break;
                 }
               }
@@ -291,38 +295,50 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
        if (!text) return 0;
        
        // Remove units and spaces
-       let priceText = text.replace(/\s*(USD|usd|$|€|EUR|eur)\s*/gi, '');
+       let priceText = text.replace(/\s*(USD|usd|EUR|eur)\s*/gi, '');
        
-       // Remove all non-numeric characters except commas and dots
-       priceText = priceText.replace(/[^\d.,]/g, '');
+       // Remove currency symbols and other non-numeric chars except commas and dots
+       priceText = priceText.replace(/[$€£¥]/g, '').replace(/[^\d.,]/g, '');
        
        if (!priceText) return 0;
        
-       // Handle TradingView number format
+       // Detect American format: "7,287" or "10,000.50" (comma = thousand separator)
+       // vs European format: "7.287" or "7,50" (comma = decimal separator)
+       
        if (priceText.includes(',') && priceText.includes('.')) {
+         // Both separators: determine which is which
          const lastDotIndex = priceText.lastIndexOf('.');
          const lastCommaIndex = priceText.lastIndexOf(',');
          
          if (lastDotIndex > lastCommaIndex) {
+           // American: 1,234.56 -> comma is thousands, dot is decimal
            priceText = priceText.replace(/,/g, '');
          } else {
-           priceText = priceText.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
+           // European: 1.234,56 -> dot is thousands, comma is decimal
+           priceText = priceText.replace(/\./g, '').replace(',', '.');
          }
        } else if (priceText.includes(',') && !priceText.includes('.')) {
          const parts = priceText.split(',');
-         if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
+         // Check if it's American thousands separator: "7,287" (3 digits after comma)
+         if (parts.length === 2 && parts[1].length === 3) {
+           // American format: 7,287 -> 7287
            priceText = priceText.replace(/,/g, '');
-         } else if (parts.length === 2 && parts[1].length <= 4) {
+         } else if (parts.length > 2) {
+           // Multiple commas: 1,234,567 -> thousands separator
+           priceText = priceText.replace(/,/g, '');
+         } else if (parts.length === 2 && parts[1].length <= 2) {
+           // Likely decimal: 12,34 -> 12.34
            priceText = priceText.replace(',', '.');
          } else {
+           // Default: remove commas (assume thousands)
            priceText = priceText.replace(/,/g, '');
          }
        }
        
        const parsed = parseFloat(priceText) || 0;
-       // Validation: prix raisonnable pour freight (entre 1 et 50000 pour accepter tous les types)
+       // Validation: prix raisonnable pour freight (entre 1 et 100000)
        // Exclure explicitement les nombres suspects (IDs, timestamps, etc.)
-       if (parsed >= 1 && parsed < 50000 && !excludedNumbers.includes(parsed)) {
+       if (parsed >= 1 && parsed < 100000 && !excludedNumbers.includes(parsed)) {
          return parsed;
        }
        return 0;
@@ -507,8 +523,8 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
            if (matches && matches[1]) {
              let matchedPrice = matches[1].replace(/,/g, '');
              const parsedPrice = parseFloat(matchedPrice);
-             // Prix freight typique: entre 50 et 5000 (éviter 20000 qui est probablement un ID)
-             if (parsedPrice >= 50 && parsedPrice < 5000 && !excludedNumbers.includes(parsedPrice)) {
+            // Prix freight typique: entre 1 et 100000 (valeurs variées selon le type)
+            if (parsedPrice >= 1 && parsedPrice < 100000 && !excludedNumbers.includes(parsedPrice)) {
                price = parsedPrice;
                console.log(`✅ Found price in context pattern for ${symbol}: ${price}`);
                break;
@@ -532,8 +548,8 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
                  continue; // Skip les nombres suspects
                }
                
-               // Filtrer les nombres raisonnables pour freight (entre 50 et 5000)
-               if (num >= 50 && num < 5000) {
+              // Filtrer les nombres raisonnables pour freight (entre 1 et 100000)
+              if (num >= 1 && num < 100000) {
                  // Trouver le contexte autour de ce nombre
                  const numIndex = htmlContent.indexOf(numStr);
                  if (numIndex !== -1) {
