@@ -218,271 +218,285 @@ const FREIGHT_SYMBOLS = [
  * Retrieves data for a specific freight symbol from TradingView
  */
 async function fetchFreightSymbolData(symbol: string, name: string, type: Commodity['type']): Promise<Commodity | null> {
-  try {
-    const data = await scrapeTradingViewSymbol(symbol);
-    
-    if (!data || !data.data) {
-      console.warn(`No data received for ${symbol}`);
-      return null;
-    }
+  // Liste des préfixes à essayer si le symbole direct ne fonctionne pas
+  const prefixes = ['', 'CME-', 'NYMEX-', 'COMEX-', 'CBOT-'];
+  
+  for (const prefix of prefixes) {
+    try {
+      const symbolToTry = prefix + symbol;
+      // Ne pas ajouter de préfixe si le symbole en a déjà un (éviter CME-CME-...)
+      if (prefix && symbol.includes('-')) continue;
+      
+      console.log(`Attempting to fetch freight symbol: ${symbolToTry}`);
+      
+      const data = await scrapeTradingViewSymbol(symbolToTry);
+      
+      if (!data || !data.data) {
+        console.warn(`No data received for ${symbolToTry}`);
+        continue;
+      }
 
-    // Parse the HTML to extract data
-    const htmlContent = data.data;
-    const root = parse(htmlContent);
-    
-    // Extract the main price
-    let price = 0;
-    let percentChange = 0;
-    let absoluteChange = 0;
-    
-         // Search for price elements in different possible selectors
-     const priceSelectors = [
-       '.tv-symbol-price-quote__value',
-       '[data-field="last_price"]',
-       '.js-symbol-last',
-       '.tv-symbol-header__price',
-       '[class*="price"]'
-     ];
-     
-     for (const selector of priceSelectors) {
-       const priceElement = root.querySelector(selector);
-       if (priceElement) {
-         const rawPriceText = priceElement.text.trim();
-         console.log(`Raw price text for ${symbol}: "${rawPriceText}"`);
-         
-         // Parse prices correctly for TradingView format
-         let priceText = rawPriceText;
-         
-         // Remove units and spaces
-         priceText = priceText.replace(/\s*(USD|usd|$|€|EUR|eur)\s*/gi, '');
-         
-         // TradingView uses comma for thousands and dot for decimals
-         // Examples: "23.1672", "1,234.56", "9,564", "0.1234"
-         
-         // Remove all non-numeric characters except commas and dots
-         priceText = priceText.replace(/[^\d.,]/g, '');
-         
-         // Handle TradingView number format
-         if (priceText.includes(',') && priceText.includes('.')) {
-           // Format like "1,234.56" - comma is thousand separator, dot is decimal
-           const lastDotIndex = priceText.lastIndexOf('.');
-           const lastCommaIndex = priceText.lastIndexOf(',');
-           
-           if (lastDotIndex > lastCommaIndex) {
-             // Standard format: remove commas, keep dots
-             priceText = priceText.replace(/,/g, '');
-           } else {
-             // Unusual format: treat comma as decimal
-             priceText = priceText.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
-           }
-                   } else if (priceText.includes(',') && !priceText.includes('.')) {
-            // Only comma present
-            const parts = priceText.split(',');
-            if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
-              // Likely thousand separator (like "7,287" or "1,234")
-              priceText = priceText.replace(/,/g, '');
-            } else if (parts.length === 2 && parts[1].length <= 4) {
-              // Likely decimal separator (like "12,34" or "23,1672")
-              priceText = priceText.replace(',', '.');
-            } else {
-              // Multiple commas or other cases - remove all commas
-              priceText = priceText.replace(/,/g, '');
-            }
-          }
-         // If only dots or no separators, keep as is
-         
-         console.log(`Processed price text for ${symbol}: "${priceText}"`);
-         price = parseFloat(priceText) || 0;
-         
-         if (price > 0) {
-           console.log(`Successfully parsed price for ${symbol}: ${price}`);
-           break;
-         }
-       }
-     }
-     
-     // If no price found, search in general content with improved regex
-     if (price === 0) {
-       // Search for price patterns in HTML content
-       const pricePatterns = [
-         /(\d+\.\d{1,4})\s*USD/i,  // Match decimal prices like "23.1672 USD"
-         /(\d{1,3}(?:,\d{3})*\.\d{1,4})\s*USD/i,  // Match "1,234.5678 USD"
-         /(\d{1,3}(?:,\d{3})+)\s*USD/i,  // Match "9,564 USD" (thousands)
-         /(\d+)\s*USD/i  // Match simple integers
+      // Parse the HTML to extract data
+      const htmlContent = data.data;
+      const root = parse(htmlContent);
+      
+      // Extract the main price
+      let price = 0;
+      let percentChange = 0;
+      let absoluteChange = 0;
+      
+           // Search for price elements in different possible selectors
+       const priceSelectors = [
+         '.tv-symbol-price-quote__value',
+         '[data-field="last_price"]',
+         '.js-symbol-last',
+         '.tv-symbol-header__price',
+         '[class*="price"]'
        ];
        
-       for (const pattern of pricePatterns) {
-         const priceMatch = htmlContent.match(pattern);
-         if (priceMatch) {
-           let matchedPrice = priceMatch[1];
+       for (const selector of priceSelectors) {
+         const priceElement = root.querySelector(selector);
+         if (priceElement) {
+           const rawPriceText = priceElement.text.trim();
+           console.log(`Raw price text for ${symbolToTry}: "${rawPriceText}"`);
            
-           // Apply same processing logic as above
-           if (matchedPrice.includes(',') && matchedPrice.includes('.')) {
-             const lastDotIndex = matchedPrice.lastIndexOf('.');
-             const lastCommaIndex = matchedPrice.lastIndexOf(',');
+           // Parse prices correctly for TradingView format
+           let priceText = rawPriceText;
+           
+           // Remove units and spaces
+           priceText = priceText.replace(/\s*(USD|usd|$|€|EUR|eur)\s*/gi, '');
+           
+           // TradingView uses comma for thousands and dot for decimals
+           // Examples: "23.1672", "1,234.56", "9,564", "0.1234"
+           
+           // Remove all non-numeric characters except commas and dots
+           priceText = priceText.replace(/[^\d.,]/g, '');
+           
+           // Handle TradingView number format
+           if (priceText.includes(',') && priceText.includes('.')) {
+             // Format like "1,234.56" - comma is thousand separator, dot is decimal
+             const lastDotIndex = priceText.lastIndexOf('.');
+             const lastCommaIndex = priceText.lastIndexOf(',');
              
              if (lastDotIndex > lastCommaIndex) {
-               matchedPrice = matchedPrice.replace(/,/g, '');
+               // Standard format: remove commas, keep dots
+               priceText = priceText.replace(/,/g, '');
              } else {
-               matchedPrice = matchedPrice.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
+               // Unusual format: treat comma as decimal
+               priceText = priceText.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
              }
-                       } else if (matchedPrice.includes(',') && !matchedPrice.includes('.')) {
-              const parts = matchedPrice.split(',');
+                     } else if (priceText.includes(',') && !priceText.includes('.')) {
+              // Only comma present
+              const parts = priceText.split(',');
               if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
-                // Likely thousand separator (like "7,287")
-                matchedPrice = matchedPrice.replace(/,/g, '');
+                // Likely thousand separator (like "7,287" or "1,234")
+                priceText = priceText.replace(/,/g, '');
               } else if (parts.length === 2 && parts[1].length <= 4) {
-                // Likely decimal separator (like "12,34")
-                matchedPrice = matchedPrice.replace(',', '.');
+                // Likely decimal separator (like "12,34" or "23,1672")
+                priceText = priceText.replace(',', '.');
               } else {
-                matchedPrice = matchedPrice.replace(/,/g, '');
+                // Multiple commas or other cases - remove all commas
+                priceText = priceText.replace(/,/g, '');
               }
             }
+           // If only dots or no separators, keep as is
            
-           price = parseFloat(matchedPrice) || 0;
+           console.log(`Processed price text for ${symbolToTry}: "${priceText}"`);
+           price = parseFloat(priceText) || 0;
+           
            if (price > 0) {
-             console.log(`Found price in content for ${symbol}: ${price}`);
+             console.log(`Successfully parsed price for ${symbolToTry}: ${price}`);
              break;
            }
          }
        }
-     }
-    
-         // Extract changes
-     const changeSelectors = [
-       '.tv-symbol-price-quote__change',
-       '[data-field="change"]',
-       '.js-symbol-change',
-       '[class*="change"]'
-     ];
-     
-     for (const selector of changeSelectors) {
-       const changeElement = root.querySelector(selector);
-       if (changeElement) {
-         const rawChangeText = changeElement.text.trim();
-         console.log(`Raw change text for ${symbol}: "${rawChangeText}"`);
+       
+       // If no price found, search in general content with improved regex
+       if (price === 0) {
+         // Search for price patterns in HTML content
+         const pricePatterns = [
+           /(\d+\.\d{1,4})\s*USD/i,  // Match decimal prices like "23.1672 USD"
+           /(\d{1,3}(?:,\d{3})*\.\d{1,4})\s*USD/i,  // Match "1,234.5678 USD"
+           /(\d{1,3}(?:,\d{3})+)\s*USD/i,  // Match "9,564 USD" (thousands)
+           /(\d+)\s*USD/i  // Match simple integers
+         ];
          
-         // Function to parse a number with separators
-         const parseNumber = (numStr: string): number => {
-           if (!numStr) return 0;
-           
-           // Preserve sign
-           const isNegative = numStr.startsWith('-') || numStr.startsWith('−');
-           const isPositive = numStr.startsWith('+');
-           
-           // Remove signs and spaces
-           let cleanNum = numStr.replace(/^[+-−]\s*/, '');
-           
-           // Apply same logic as price parsing
-           if (cleanNum.includes(',') && cleanNum.includes('.')) {
-             const lastDotIndex = cleanNum.lastIndexOf('.');
-             const lastCommaIndex = cleanNum.lastIndexOf(',');
+         for (const pattern of pricePatterns) {
+           const priceMatch = htmlContent.match(pattern);
+           if (priceMatch) {
+             let matchedPrice = priceMatch[1];
              
-             if (lastDotIndex > lastCommaIndex) {
-               cleanNum = cleanNum.replace(/,/g, '');
-             } else {
-               cleanNum = cleanNum.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
-             }
-                       } else if (cleanNum.includes(',') && !cleanNum.includes('.')) {
-              const parts = cleanNum.split(',');
-              if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
-                // Likely thousand separator (like "7,287")
-                cleanNum = cleanNum.replace(/,/g, '');
-              } else if (parts.length === 2 && parts[1].length <= 4) {
-                // Likely decimal separator (like "12,34")
-                cleanNum = cleanNum.replace(',', '.');
-              } else {
-                cleanNum = cleanNum.replace(/,/g, '');
+             // Apply same processing logic as above
+             if (matchedPrice.includes(',') && matchedPrice.includes('.')) {
+               const lastDotIndex = matchedPrice.lastIndexOf('.');
+               const lastCommaIndex = matchedPrice.lastIndexOf(',');
+               
+               if (lastDotIndex > lastCommaIndex) {
+                 matchedPrice = matchedPrice.replace(/,/g, '');
+               } else {
+                 matchedPrice = matchedPrice.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
+               }
+                         } else if (matchedPrice.includes(',') && !matchedPrice.includes('.')) {
+                const parts = matchedPrice.split(',');
+                if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
+                  // Likely thousand separator (like "7,287")
+                  matchedPrice = matchedPrice.replace(/,/g, '');
+                } else if (parts.length === 2 && parts[1].length <= 4) {
+                  // Likely decimal separator (like "12,34")
+                  matchedPrice = matchedPrice.replace(',', '.');
+                } else {
+                  matchedPrice = matchedPrice.replace(/,/g, '');
+                }
               }
-            }
-           
-           const result = parseFloat(cleanNum) || 0;
-           return isNegative ? -result : result;
-         };
-         
-         // Extract absolute change (without %)
-         const absoluteMatch = rawChangeText.match(/([+-−]?\s*\d+(?:[,\.]\d+)*)\s*(?!\%)/);
-         if (absoluteMatch) {
-           absoluteChange = parseNumber(absoluteMatch[1]);
-           console.log(`Parsed absolute change for ${symbol}: ${absoluteChange}`);
+             
+             price = parseFloat(matchedPrice) || 0;
+             if (price > 0) {
+               console.log(`Found price in content for ${symbolToTry}: ${price}`);
+               break;
+             }
+           }
          }
-         
-         // Extract percent change
-         const percentMatch = rawChangeText.match(/([+-−]?\s*\d+(?:[,\.]\d+)*)\s*%/);
-         if (percentMatch) {
-           percentChange = parseNumber(percentMatch[1]);
-           console.log(`Parsed percent change for ${symbol}: ${percentChange}`);
-         }
-         
-         if (absoluteChange !== 0 || percentChange !== 0) break;
        }
-     }
-     
-     // Extract from HTML content if not found
-     if (percentChange === 0 && absoluteChange === 0) {
-       // Search for patterns like "+0.6966 +2.10%" or "0 0.00%"
-       const changePatterns = [
-         /([+-]?\s*\d+(?:[,\.]\d+)*)\s*([+-]?\s*\d+(?:[,\.]\d+)*)%/,
-         /([+-]?\s*\d+(?:[,\.]\d+)*)\s*USD.*?([+-]?\s*\d+(?:[,\.]\d+)*)%/i,
-         /change.*?([+-]?\s*\d+(?:[,\.]\d+)*).*?([+-]?\s*\d+(?:[,\.]\d+)*)%/i
+      
+           // Extract changes
+       const changeSelectors = [
+         '.tv-symbol-price-quote__change',
+         '[data-field="change"]',
+         '.js-symbol-change',
+         '[class*="change"]'
        ];
        
-       for (const pattern of changePatterns) {
-         const changeMatch = htmlContent.match(pattern);
-         if (changeMatch) {
+       for (const selector of changeSelectors) {
+         const changeElement = root.querySelector(selector);
+         if (changeElement) {
+           const rawChangeText = changeElement.text.trim();
+           console.log(`Raw change text for ${symbolToTry}: "${rawChangeText}"`);
+           
+           // Function to parse a number with separators
            const parseNumber = (numStr: string): number => {
              if (!numStr) return 0;
-             const isNegative = numStr.includes('-') || numStr.includes('−');
-             let cleanNum = numStr.replace(/[^\d.,]/g, '');
-             if (cleanNum.includes(',') && cleanNum.split(',')[1]?.length > 2) {
-               cleanNum = cleanNum.replace(',', '');
-             } else {
-               cleanNum = cleanNum.replace(',', '.');
-             }
+             
+             // Preserve sign
+             const isNegative = numStr.startsWith('-') || numStr.startsWith('−');
+             const isPositive = numStr.startsWith('+');
+             
+             // Remove signs and spaces
+             let cleanNum = numStr.replace(/^[+-−]\s*/, '');
+             
+             // Apply same logic as price parsing
+             if (cleanNum.includes(',') && cleanNum.includes('.')) {
+               const lastDotIndex = cleanNum.lastIndexOf('.');
+               const lastCommaIndex = cleanNum.lastIndexOf(',');
+               
+               if (lastDotIndex > lastCommaIndex) {
+                 cleanNum = cleanNum.replace(/,/g, '');
+               } else {
+                 cleanNum = cleanNum.replace(/\./g, '').replace(/,([^,]*)$/, '.$1');
+               }
+                         } else if (cleanNum.includes(',') && !cleanNum.includes('.')) {
+                const parts = cleanNum.split(',');
+                if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
+                  // Likely thousand separator (like "7,287")
+                  cleanNum = cleanNum.replace(/,/g, '');
+                } else if (parts.length === 2 && parts[1].length <= 4) {
+                  // Likely decimal separator (like "12,34")
+                  cleanNum = cleanNum.replace(',', '.');
+                } else {
+                  cleanNum = cleanNum.replace(/,/g, '');
+                }
+              }
+             
              const result = parseFloat(cleanNum) || 0;
              return isNegative ? -result : result;
            };
            
-           absoluteChange = parseNumber(changeMatch[1]);
-           percentChange = parseNumber(changeMatch[2]);
+           // Extract absolute change (without %)
+           const absoluteMatch = rawChangeText.match(/([+-−]?\s*\d+(?:[,\.]\d+)*)\s*(?!\%)/);
+           if (absoluteMatch) {
+             absoluteChange = parseNumber(absoluteMatch[1]);
+             console.log(`Parsed absolute change for ${symbolToTry}: ${absoluteChange}`);
+           }
            
-           if (absoluteChange !== 0 || percentChange !== 0) {
-             console.log(`Found changes in content for ${symbol}: abs=${absoluteChange}, pct=${percentChange}`);
-             break;
+           // Extract percent change
+           const percentMatch = rawChangeText.match(/([+-−]?\s*\d+(?:[,\.]\d+)*)\s*%/);
+           if (percentMatch) {
+             percentChange = parseNumber(percentMatch[1]);
+             console.log(`Parsed percent change for ${symbolToTry}: ${percentChange}`);
+           }
+           
+           if (absoluteChange !== 0 || percentChange !== 0) break;
+         }
+       }
+       
+       // Extract from HTML content if not found
+       if (percentChange === 0 && absoluteChange === 0) {
+         // Search for patterns like "+0.6966 +2.10%" or "0 0.00%"
+         const changePatterns = [
+           /([+-]?\s*\d+(?:[,\.]\d+)*)\s*([+-]?\s*\d+(?:[,\.]\d+)*)%/,
+           /([+-]?\s*\d+(?:[,\.]\d+)*)\s*USD.*?([+-]?\s*\d+(?:[,\.]\d+)*)%/i,
+           /change.*?([+-]?\s*\d+(?:[,\.]\d+)*).*?([+-]?\s*\d+(?:[,\.]\d+)*)%/i
+         ];
+         
+         for (const pattern of changePatterns) {
+           const changeMatch = htmlContent.match(pattern);
+           if (changeMatch) {
+             const parseNumber = (numStr: string): number => {
+               if (!numStr) return 0;
+               const isNegative = numStr.includes('-') || numStr.includes('−');
+               let cleanNum = numStr.replace(/[^\d.,]/g, '');
+               if (cleanNum.includes(',') && cleanNum.split(',')[1]?.length > 2) {
+                 cleanNum = cleanNum.replace(',', '');
+               } else {
+                 cleanNum = cleanNum.replace(',', '.');
+               }
+               const result = parseFloat(cleanNum) || 0;
+               return isNegative ? -result : result;
+             };
+             
+             absoluteChange = parseNumber(changeMatch[1]);
+             percentChange = parseNumber(changeMatch[2]);
+             
+             if (absoluteChange !== 0 || percentChange !== 0) {
+               console.log(`Found changes in content for ${symbolToTry}: abs=${absoluteChange}, pct=${percentChange}`);
+               break;
+             }
            }
          }
        }
-     }
-    
-    console.log(`Parsed ${symbol}: price=${price}, change=${absoluteChange}, percent=${percentChange}`);
-    
-         // Return null if no valid data
-     if (price === 0) {
-       console.warn(`No valid price found for ${symbol}`);
-       return null;
-     }
-     
-     // If no change found, default to 0 (like on TradingView)
-     if (isNaN(percentChange)) percentChange = 0;
-     if (isNaN(absoluteChange)) absoluteChange = 0;
-    
-         return {
-       symbol,
-       name,
-       price,
-       percentChange,
-       absoluteChange,
-       high: 0, // For freight, no need for high/low
-       low: 0,
-       technicalEvaluation: 'Neutral',
-       type,
-       category: 'freight'
-     };
-    
-  } catch (error) {
-    console.error(`Error fetching ${symbol}:`, error);
-    return null;
+      
+      console.log(`Parsed ${symbolToTry}: price=${price}, change=${absoluteChange}, percent=${percentChange}`);
+      
+           // Return null if no valid data
+       if (price === 0) {
+         console.warn(`No valid price found for ${symbolToTry}, trying next prefix...`);
+         continue;
+       }
+       
+       // If no change found, default to 0 (like on TradingView)
+       if (isNaN(percentChange)) percentChange = 0;
+       if (isNaN(absoluteChange)) absoluteChange = 0;
+      
+           return {
+         symbol,
+         name,
+         price,
+         percentChange,
+         absoluteChange,
+         high: 0, // For freight, no need for high/low
+         low: 0,
+         technicalEvaluation: 'Neutral',
+         type,
+         category: 'freight'
+       };
+      
+    } catch (error) {
+      console.error(`Error fetching ${symbol}:`, error);
+      // Continue to next prefix
+    }
   }
+  
+  console.error(`Failed to fetch ${symbol} with all prefixes`);
+  return null;
 }
 
 /**

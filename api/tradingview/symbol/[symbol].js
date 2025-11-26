@@ -30,13 +30,26 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { symbol } = req.query;
+  const { symbol, exchange } = req.query;
   
   if (!symbol) {
     return res.status(400).json({ error: 'Symbol parameter is required' });
   }
 
-  const url = `https://www.tradingview.com/symbols/NYMEX-${symbol}/`;
+  // Construire l'URL
+  // Si un échange est fourni, l'utiliser (ex: CME-CS61!)
+  // Si le symbole contient déjà un tiret, supposer qu'il contient l'échange
+  // Sinon, essayer sans échange (TradingView redirige souvent) ou utiliser NYMEX par défaut pour compatibilité si nécessaire
+  let urlSymbol = symbol;
+  if (exchange) {
+    urlSymbol = `${exchange}-${symbol}`;
+  } else if (!symbol.includes('-') && !symbol.includes(':')) {
+    // Pour la rétrocompatibilité ou si on veut un défaut. 
+    // Mais pour le fret, on veut éviter NYMEX forcé.
+    // On essaie sans préfixe, ou on laisse le client gérer.
+  }
+
+  const url = `https://www.tradingview.com/symbols/${urlSymbol}/`;
 
   let browser = null;
   let page = null;

@@ -83,7 +83,9 @@ export async function scrapeTradingViewSymbol(symbol: string): Promise<ScrapingR
     console.warn(`Vercel function failed for symbol ${symbol}, falling back:`, error);
     
     // Fallback vers la fonction générique ou API Ninja
-    const url = `https://www.tradingview.com/symbols/NYMEX-${symbol}/`;
+    // On essaie sans préfixe NYMEX forcé, ou on laisse le symbole tel quel s'il a déjà un préfixe
+    const urlSymbol = symbol.includes('-') ? symbol : `${symbol}`;
+    const url = `https://www.tradingview.com/symbols/${urlSymbol}/`;
     return scrapePage(url);
   }
 }
