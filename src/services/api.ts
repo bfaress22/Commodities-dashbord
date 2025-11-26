@@ -245,19 +245,26 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
       let percentChange = 0;
       let absoluteChange = 0;
       
-           // Search for price elements in different possible selectors
-       const priceSelectors = [
-         '.tv-symbol-price-quote__value',
-         '[data-field="last_price"]',
-         '.js-symbol-last',
-         '.tv-symbol-header__price',
-         '[class*="price"]'
-       ];
+         // Search for price elements in different possible selectors
+     const priceSelectors = [
+       '.tv-symbol-price-quote__value',
+       '[data-field="last_price"]',
+       '.js-symbol-last',
+       '.tv-symbol-header__price',
+       '[class*="price"]',
+       '[data-test-id="quote-lp"]', // Sélecteur moderne TradingView
+       'div[class*="priceWrapper"] span[class*="last"]',
+       'span[class^="last-"]' // Classes obfusquées type last-JWoJqCpY
+     ];
+     
+     for (const selector of priceSelectors) {
+       const priceElements = root.querySelectorAll(selector);
        
-       for (const selector of priceSelectors) {
-         const priceElement = root.querySelector(selector);
-         if (priceElement) {
-           const rawPriceText = priceElement.text.trim();
+       for (const priceElement of priceElements) {
+         // Ignorer si c'est un label ou contient du texte non pertinent
+         if (priceElement.text.includes('High') || priceElement.text.includes('Low')) continue;
+         
+         const rawPriceText = priceElement.text.trim();
            console.log(`Raw price text for ${symbolToTry}: "${rawPriceText}"`);
            
            // Parse prices correctly for TradingView format
@@ -309,6 +316,7 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
              break;
            }
          }
+         if (price > 0) break;
        }
        
        // If no price found, search in general content with improved regex
