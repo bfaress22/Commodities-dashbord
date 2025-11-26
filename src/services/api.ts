@@ -9,7 +9,7 @@ export interface Commodity {
   symbol: string;
   name: string;
   price: number;
-  change: number;
+  absoluteChange: number;
   percentChange: number;
   high: number;
   low: number;
@@ -173,7 +173,7 @@ function parseSymbolPage(htmlContent: string, symbol: string, defaultName: strin
       symbol,
       name,
       price,
-      change: absoluteChange,
+      absoluteChange,
       percentChange,
       high,
       low,
