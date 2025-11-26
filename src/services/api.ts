@@ -237,8 +237,65 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
     
     console.log(`Parsing HTML for ${symbol} (${htmlContent.length} chars)`);
     
+    // MÉTHODE 0: Utiliser les données pré-extraites si disponibles (de l'API améliorée)
+    const extracted = (data as any).extracted;
+    if (extracted) {
+      console.log(`Using pre-extracted data for ${symbol}:`, extracted);
+      
+      // Utiliser le prix du FAQ JSON-LD (le plus fiable)
+      if (extracted.faqPrice) {
+        const cleanPrice = extracted.faqPrice.replace(/,/g, '');
+        const parsedPrice = parseFloat(cleanPrice);
+        if (parsedPrice > 0 && parsedPrice < 100000) {
+          price = parsedPrice;
+          console.log(`✅ Using pre-extracted FAQ price for ${symbol}: ${price}`);
+        }
+      }
+      
+      // Fallback vers le prix direct
+      if (price === 0 && extracted.directPrice) {
+        const cleanPrice = extracted.directPrice.replace(/,/g, '').replace(/[^\d.]/g, '');
+        const parsedPrice = parseFloat(cleanPrice);
+        if (parsedPrice > 0 && parsedPrice < 100000) {
+          price = parsedPrice;
+          console.log(`✅ Using pre-extracted direct price for ${symbol}: ${price}`);
+        }
+      }
+      
+      // Extraire le changement
+      if (extracted.changeText) {
+        const percentMatch = extracted.changeText.match(/([+-−]?\s*\d+(?:[.,]\d+)*)\s*%/);
+        if (percentMatch) {
+          let val = percentMatch[1].replace(/,/g, '.').replace(/[^\d.-]/g, '');
+          percentChange = parseFloat(val) || 0;
+          if (extracted.changeText.includes('−') || extracted.changeText.includes('-')) {
+            percentChange = -Math.abs(percentChange);
+          }
+          console.log(`✅ Using pre-extracted percent change for ${symbol}: ${percentChange}`);
+        }
+      }
+    }
+    
     // Nombres à exclure explicitement (IDs, timestamps, codes, etc.) - déclaré une seule fois
     const excludedNumbers = [20000, 2000, 10000, 50000, 9999, 8888, 7777, 2024, 2025, 1999, 2001];
+    
+    // Si le prix a déjà été trouvé via les données pré-extraites, on peut sauter le reste
+    if (price > 0 && percentChange !== undefined) {
+      console.log(`Price already found via pre-extracted data for ${symbol}: ${price}, skipping HTML parsing`);
+      
+      return {
+        symbol,
+        name,
+        price,
+        percentChange: percentChange || 0,
+        absoluteChange: absoluteChange || 0,
+        high: 0,
+        low: 0,
+        technicalEvaluation: 'Neutral',
+        type,
+        category: 'freight'
+      };
+    }
     
     // MÉTHODE 1: Extraire depuis JSON-LD (le plus fiable - TradingView inclut des données structurées)
     const jsonLdScripts = root.querySelectorAll('script[type="application/ld+json"]');
