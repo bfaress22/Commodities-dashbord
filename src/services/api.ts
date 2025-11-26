@@ -215,6 +215,115 @@ const FREIGHT_SYMBOLS = [
 ];
 
 /**
+ * Extracts price and change from HTML content using multiple robust strategies
+ */
+function extractPriceFromHtml(htmlContent: string, symbol: string): { price: number, percentChange: number, absoluteChange: number } | null {
+  try {
+    const root = parse(htmlContent);
+    let price = 0;
+    let percentChange = 0;
+    let absoluteChange = 0;
+
+    // Strategy 1: Search for JSON in script tags (Most robust)
+    const scripts = root.querySelectorAll('script');
+    for (const script of scripts) {
+      const text = script.text;
+      if (text.includes('"last_price":') || text.includes('"close":') || text.includes('"lp":')) {
+        // Try to find JSON object like {"last_price": 123.45}
+        const matches = text.match(/"(last_price|close|lp)":\s*([\d.]+)/);
+        if (matches && matches[2]) {
+          price = parseFloat(matches[2]);
+          
+          const changeMatch = text.match(/"(ch|change|change_abs)":\s*([+-]?[\d.]+)/);
+          if (changeMatch) absoluteChange = parseFloat(changeMatch[2]);
+          
+          const pctMatch = text.match(/"(chp|change_percent)":\s*([+-]?[\d.]+)/);
+          if (pctMatch) percentChange = parseFloat(pctMatch[2]);
+          
+          if (price > 0) {
+            console.log(`Extracted price from JSON script for ${symbol}: ${price}`);
+            return { price, percentChange, absoluteChange };
+          }
+        }
+      }
+    }
+
+    // Strategy 2: Regex on full text (Fallback for hidden/obfuscated data)
+    const regexPatterns = [
+      /"last_price":\s*([\d.]+)/,
+      /"lp":\s*([\d.]+)/,
+      /class="[^"]*last[^"]*">([\d.,]+)</,
+      /data-test-id="quote-lp"[^>]*>\s*<span[^>]*>\s*([\d.,]+)/,
+      /class="[^"]*price[^"]*"\s*>\s*([\d.,]+)/
+    ];
+
+    for (const pattern of regexPatterns) {
+      const match = htmlContent.match(pattern);
+      if (match && match[1]) {
+        let priceStr = match[1].replace(/,/g, ''); 
+        // Basic heuristic for comma vs dot
+        if (match[1].includes(',') && match[1].includes('.')) {
+           // US format (1,234.56) -> remove comma
+           priceStr = match[1].replace(/,/g, '');
+        } else if (match[1].includes(',') && !match[1].includes('.')) {
+           // Check context or assume US format for TradingView internal data
+           priceStr = match[1].replace(/,/g, ''); 
+        }
+        
+        const parsed = parseFloat(priceStr);
+        if (!isNaN(parsed) && parsed > 0) {
+          price = parsed;
+          console.log(`Extracted price via regex ${pattern} for ${symbol}: ${price}`);
+          break;
+        }
+      }
+    }
+
+    // Strategy 3: Enhanced CSS Selectors
+    if (price === 0) {
+       const priceSelectors = [
+         '[data-test-id="quote-lp"]',
+         '.tv-symbol-price-quote__value',
+         '[class*="last-"]', 
+         '[class*="priceWrapper"] span',
+         '.js-symbol-last',
+         '[class*="price"]'
+       ];
+       
+       for (const selector of priceSelectors) {
+         const els = root.querySelectorAll(selector);
+         for (const el of els) {
+           const text = el.text.trim();
+           // Clean text: remove non-numeric except . and , and -
+           const cleanText = text.replace(/[^\d.,-]/g, '');
+           
+           if (/^[\d.,]+$/.test(cleanText)) {
+             let finalPriceStr = cleanText;
+             if (finalPriceStr.includes(',')) finalPriceStr = finalPriceStr.replace(/,/g, '');
+             
+             const p = parseFloat(finalPriceStr);
+             if (!isNaN(p) && p > 0) {
+               price = p;
+               break;
+             }
+           }
+         }
+         if (price > 0) break;
+       }
+    }
+
+    if (price > 0) {
+      return { price, percentChange, absoluteChange };
+    }
+    
+    return null;
+  } catch (e) {
+    console.error(`Extraction error for ${symbol}:`, e);
+    return null;
+  }
+}
+
+/**
  * Retrieves data for a specific freight symbol from TradingView
  */
 async function fetchFreightSymbolData(symbol: string, name: string, type: Commodity['type']): Promise<Commodity | null> {

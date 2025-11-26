@@ -75,6 +75,13 @@ export async function scrapeTradingViewSymbol(symbol: string): Promise<ScrapingR
     }
     
     const data = await response.json();
+    
+    // Vérifier si le contenu est bloqué par Cloudflare
+    if (data.data && (data.data.includes('Just one more step') || data.data.includes('Security check'))) {
+      console.warn(`Blocked by Cloudflare for symbol ${symbol}`);
+      throw new Error('Blocked by Cloudflare');
+    }
+    
     console.log(`Successfully scraped via Vercel symbol ${symbol}: ${data.data.length} characters`);
     
     return data;
