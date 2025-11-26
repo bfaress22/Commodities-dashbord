@@ -23,23 +23,23 @@ export default async function handler(req, res) {
   let page = null;
 
   try {
-    console.log(`Fast scraping TradingView symbol: ${symbol}`);
+    console.log(`Scraping TradingView symbol: ${symbol}`);
     
     browser = await getBrowser();
     page = await browser.newPage();
     
-    // Configuration optimisée de la page
+    // Configuration optimisée de la page (bloque les ressources lourdes)
     await setupPage(page);
     
-    // Naviguer vers la page avec timeout réduit
+    // Naviguer vers la page avec timeout aligné sur les autres routes
     console.log(`Navigating to: ${url}`);
     await page.goto(url, { 
       waitUntil: 'domcontentloaded',
-      timeout: 20000 // Timeout réduit pour Vercel
+      timeout: 20000 
     });
     console.log('TradingView symbol page loaded successfully');
     
-    // Attente intelligente optimisée
+    // Attente intelligente basée sur le type de site (TradingView)
     await smartWait(page, url);
     
     // Extraire le HTML
