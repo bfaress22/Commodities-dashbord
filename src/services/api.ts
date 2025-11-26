@@ -230,6 +230,16 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
     const htmlContent = data.data;
     const root = parse(htmlContent);
     
+    // VÉRIFICATION CRITIQUE: S'assurer que le symbole est bien présent dans le HTML
+    // Si le symbole n'est pas trouvé, c'est que la mauvaise page a été scrapée
+    const symbolInHtml = htmlContent.includes(symbol) || htmlContent.includes(symbol.replace('!', ''));
+    if (!symbolInHtml) {
+      console.error(`❌ Symbol ${symbol} NOT FOUND in scraped HTML! Wrong page scraped?`);
+      console.log(`HTML preview (first 500 chars): ${htmlContent.substring(0, 500)}`);
+      return null;
+    }
+    console.log(`✅ Symbol ${symbol} confirmed in HTML`);
+    
     // Extract the main price
     let price = 0;
     let percentChange = 0;
@@ -240,108 +250,113 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
     // Nombres à exclure explicitement (IDs, timestamps, codes, etc.) - déclaré une seule fois
     const excludedNumbers = [20000, 2000, 10000, 50000, 9999, 8888, 7777, 2024, 2025, 1999, 2001];
     
-    // MÉTHODE 0: Chercher le prix du symbole spécifique dans le HTML
-    // Le prix principal est toujours associé au symbole dans le header
-    // Format: "CS61! ... 7,287 ... USD" (le symbole apparaît juste avant le prix)
-    const symbolPricePattern = new RegExp(
-      `${symbol.replace('!', '\\!')}[^\\d]*?(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,4})?|\\d+(?:\\.\\d{1,4})?)\\s*(?:USD|D)`,
-      'i'
-    );
-    const symbolPriceMatch = htmlContent.match(symbolPricePattern);
-    if (symbolPriceMatch && symbolPriceMatch[1]) {
-      const cleanPrice = symbolPriceMatch[1].replace(/,/g, '');
-      const parsedPrice = parseFloat(cleanPrice);
-      if (parsedPrice > 0 && parsedPrice < 100000 && !excludedNumbers.includes(parsedPrice)) {
-        price = parsedPrice;
-        console.log(`✅ Found price near symbol ${symbol}: ${price} (raw: ${symbolPriceMatch[1]})`);
-      }
-    }
+    // MÉTHODE 0: Chercher le prix directement près du symbole dans le HTML (le plus précis)
+    // Le prix principal est toujours proche du symbole dans le header
+    console.log(`Searching for price near symbol ${symbol} in HTML...`);
     
-    // MÉTHODE 1: Extraire depuis JSON-LD (le plus fiable - TradingView inclut des données structurées)
-    if (price === 0) {
-      console.log(`Searching JSON-LD for ${symbol}...`);
-      const jsonLdScripts = root.querySelectorAll('script[type="application/ld+json"]');
-      console.log(`Found ${jsonLdScripts.length} JSON-LD scripts`);
-      
-      for (const script of jsonLdScripts) {
-        try {
-          const jsonData = JSON.parse(script.innerHTML);
-          // FAQPage contient souvent le prix dans les réponses
-          if (jsonData['@type'] === 'FAQPage' && jsonData.mainEntity) {
-            console.log(`Found FAQPage JSON-LD for ${symbol}`);
-            for (const faq of jsonData.mainEntity) {
-              if (faq.acceptedAnswer && faq.acceptedAnswer.text) {
-                console.log(`FAQ answer: "${faq.acceptedAnswer.text.substring(0, 100)}..."`);
-                // Chercher le prix dans la réponse
-                // Format américain: "7,287 USD" (virgule = séparateur de milliers)
-                // Format européen: "7.287 USD" ou "310 USD"
-                const priceMatch = faq.acceptedAnswer.text.match(/is\s+([\d,]+(?:\.\d+)?)\s*USD/i);
-                if (priceMatch) {
-                  // Supprimer les virgules (séparateur de milliers format US)
-                  const cleanPrice = priceMatch[1].replace(/,/g, '');
-                  const parsedPrice = parseFloat(cleanPrice);
-                  console.log(`JSON-LD price candidate for ${symbol}: ${parsedPrice} (raw: ${priceMatch[1]})`);
-                  if (parsedPrice > 0 && parsedPrice < 100000 && !excludedNumbers.includes(parsedPrice)) {
-                    price = parsedPrice;
-                    console.log(`✅ Found price in JSON-LD FAQ for ${symbol}: ${price} (raw: ${priceMatch[1]})`);
-                    break;
-                  }
-                }
-              }
-            }
-          }
-          if (price > 0) break;
-        } catch (e) {
-          console.log(`JSON-LD parse error for ${symbol}:`, e);
-        }
-      }
-    }
+    // Trouver toutes les occurrences du symbole dans le HTML
+    const symbolRegex = new RegExp(symbol.replace('!', '\\!'), 'gi');
+    const symbolMatches = [...htmlContent.matchAll(symbolRegex)];
     
-    // MÉTHODE 2: Chercher le prix principal dans le header (ÉVITER les "Related commodities")
-    // Le prix principal est dans les premières occurences, pas dans les sections Related/Suggestions
-    if (price === 0) {
-      console.log(`Searching for main price in header for ${symbol}...`);
+    for (const match of symbolMatches.slice(0, 3)) { // Prendre les 3 premières occurrences
+      const symbolIndex = match.index || 0;
       
-      // Chercher le premier grand nombre suivi de USD dans le HTML (avant "Related")
-      const relatedIndex = htmlContent.toLowerCase().indexOf('related');
-      const searchZone = relatedIndex > 0 ? htmlContent.substring(0, relatedIndex) : htmlContent.substring(0, Math.min(htmlContent.length, 50000));
+      // Chercher le prix dans un contexte de 500 caractères après le symbole
+      const contextStart = symbolIndex;
+      const contextEnd = Math.min(htmlContent.length, symbolIndex + 500);
+      const context = htmlContent.substring(contextStart, contextEnd);
       
-      // Pattern pour le prix principal: nombre significatif (pas les petits comme 1.8124)
-      // Format freight: généralement des nombres comme 7287, 310, 2500
-      const mainPricePatterns = [
-        // Prix avec séparateur de milliers US: "7,287"
-        />([\d,]+)<[^>]*>(?:[^<]*<[^>]*>)*[^<]*USD/i,
-        // Prix simple: ">7287<" suivi de USD
-        />(\d{2,5})<[^>]*>(?:[^<]*<[^>]*>)*[^<]*USD/i,
-        // Pattern avec "D" (indicateur de délai)
-        />([\d,]+)<[^>]*>(?:[^<]*<[^>]*>)*[^<]*D[^<]*USD/i,
+      // Patterns pour trouver le prix près du symbole
+      const pricePatterns = [
+        // Format: "CS61! ... 7,287 ... USD"
+        new RegExp(`${symbol.replace('!', '\\!')}[^\\d]*?(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,4})?|\\d+(?:\\.\\d{1,4})?)\\s*(?:USD|D)`, 'i'),
+        // Format: nombre suivi de USD dans le contexte
+        /(\d{1,3}(?:,\d{3})*(?:\.\d{1,4})?|\d+(?:\.\d{1,4})?)\s*USD/i,
+        // Format: nombre dans un div suivi de USD
+        />(\d{1,3}(?:,\d{3})*(?:\.\d{1,4})?|\d+(?:\.\d{1,4})?)<\/[^>]*>[^<]*USD/i
       ];
       
-      for (const pattern of mainPricePatterns) {
-        const match = searchZone.match(pattern);
-        if (match && match[1]) {
-          const cleanPrice = match[1].replace(/,/g, '');
+      for (const pattern of pricePatterns) {
+        const priceMatch = context.match(pattern);
+        if (priceMatch && priceMatch[1]) {
+          const cleanPrice = priceMatch[1].replace(/,/g, '');
           const parsedPrice = parseFloat(cleanPrice);
-          // Pour freight, les prix sont généralement > 100 (routes) ou > 1000 (containers)
-          if (parsedPrice > 50 && parsedPrice < 100000 && !excludedNumbers.includes(parsedPrice)) {
+          if (parsedPrice > 0 && parsedPrice < 100000 && !excludedNumbers.includes(parsedPrice)) {
             price = parsedPrice;
-            console.log(`✅ Found main price in header for ${symbol}: ${price} (raw: ${match[1]})`);
+            console.log(`✅ Found price near symbol ${symbol}: ${price} (raw: ${priceMatch[1]})`);
             break;
           }
         }
       }
+      
+      if (price > 0) break;
     }
     
-    // MÉTHODE 3: Sélecteurs CSS (fallback si les méthodes précédentes échouent)
+    // MÉTHODE 1: Extraire depuis JSON-LD (le plus fiable - TradingView inclut des données structurées)
+    // IMPORTANT: Vérifier que le JSON-LD correspond bien au symbole recherché
+    if (price === 0) {
+      console.log(`Trying JSON-LD for ${symbol}...`);
+    }
+    const jsonLdScripts = root.querySelectorAll('script[type="application/ld+json"]');
+    for (const script of jsonLdScripts) {
+      try {
+        const jsonData = JSON.parse(script.innerHTML);
+        
+        // Vérifier que le JSON-LD correspond au bon symbole
+        const scriptContent = script.innerHTML;
+        if (!scriptContent.includes(symbol) && !scriptContent.includes(symbol.replace('!', ''))) {
+          console.log(`Skipping JSON-LD script (doesn't contain ${symbol})`);
+          continue;
+        }
+        
+        // FAQPage contient souvent le prix dans les réponses
+        if (jsonData['@type'] === 'FAQPage' && jsonData.mainEntity) {
+          for (const faq of jsonData.mainEntity) {
+            if (faq.acceptedAnswer && faq.acceptedAnswer.text) {
+              // Vérifier que la FAQ concerne bien ce symbole
+              if (!faq.acceptedAnswer.text.includes(symbol) && !faq.name?.includes(symbol)) {
+                continue; // Skip si la FAQ ne concerne pas ce symbole
+              }
+              
+              // Chercher le prix dans la réponse
+              // Format américain: "7,287 USD" (virgule = séparateur de milliers)
+              // Format européen: "7.287 USD" ou "310 USD"
+              const priceMatch = faq.acceptedAnswer.text.match(/is\s+(\d{1,3}(?:,\d{3})*(?:\.\d{1,4})?|\d+(?:\.\d{1,4})?)\s*USD/i);
+              if (priceMatch) {
+                // Supprimer les virgules (séparateur de milliers format US)
+                const cleanPrice = priceMatch[1].replace(/,/g, '');
+                const parsedPrice = parseFloat(cleanPrice);
+                if (parsedPrice > 0 && parsedPrice < 100000 && !excludedNumbers.includes(parsedPrice)) {
+                  price = parsedPrice;
+                  console.log(`✅ Found price in JSON-LD FAQ for ${symbol}: ${price} (raw: ${priceMatch[1]})`);
+                  break;
+                }
+              }
+            }
+          }
+        }
+        if (price > 0) break;
+      } catch (e) {
+        // JSON parse error, continue
+      }
+    }
+    
+    // MÉTHODE 2: Sélecteurs CSS dynamiques de TradingView (classes avec suffixes hash)
     const priceSelectors = [
       // Sélecteurs avec wildcards pour classes dynamiques TradingView
       '[class*="lastContainer"]',
       '[class*="last-"][class*="js-symbol-last"]',
+      '[class*="last-"]',
+      '[class*="price-quote"]',
       '.js-symbol-last',
+      '[data-symbol] [class*="last"]',
       // Sélecteurs spécifiques TradingView legacy
       '.tv-symbol-price-quote__value',
       '[data-field="last_price"]',
-      '.tv-symbol-header__price'
+      '.tv-symbol-header__price',
+      // Sélecteurs génériques de secours
+      '[class*="quote"]',
+      '[class*="value"]'
     ];
      
      // Fonction helper pour parser un prix depuis un texte
@@ -398,36 +413,74 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
        return 0;
      };
      
-    // Si le prix a déjà été trouvé, passer la recherche CSS
-    if (price > 0) {
-      console.log(`Price already found for ${symbol}: ${price}, skipping CSS search`);
-    }
-    
-    // MÉTHODE 3: Essayer les sélecteurs CSS spécifiques (fallback)
-    if (price === 0) {
-      console.log(`Trying CSS selectors for ${symbol}...`);
-     for (const selector of priceSelectors) { // Essayer tous les sélecteurs
-       try {
-         const priceElement = root.querySelector(selector);
-         if (priceElement) {
-           const rawPriceText = priceElement.text.trim();
-           console.log(`Raw price text for ${symbol} (${selector}): "${rawPriceText.substring(0, 50)}"`);
+     // Si le prix a déjà été trouvé via JSON-LD, passer la recherche CSS
+     if (price > 0) {
+       console.log(`Price already found via JSON-LD for ${symbol}: ${price}, skipping CSS search`);
+     }
+     
+     // Essayer les sélecteurs CSS spécifiques (excludedNumbers déjà déclaré plus haut)
+     if (price === 0) {
+       console.log(`Trying CSS selectors for ${symbol}...`);
+       
+       // Trouver la section principale (avant "Related commodities" ou "Related")
+       const relatedIndex = htmlContent.toLowerCase().indexOf('related');
+       const mainSection = relatedIndex > 0 ? htmlContent.substring(0, relatedIndex) : htmlContent;
+       const mainRoot = parse(mainSection);
+       
+       for (const selector of priceSelectors) { // Essayer tous les sélecteurs
+         try {
+           // Chercher d'abord dans la section principale (pas dans Related)
+           let priceElement = mainRoot.querySelector(selector);
            
-           const potentialPrice = parsePriceFromText(rawPriceText);
-           
-          // Validation stricte: exclure les nombres suspects
-          if (potentialPrice > 0 && !excludedNumbers.includes(potentialPrice) && potentialPrice < 50000) {
-            price = potentialPrice;
-            console.log(`✅ Successfully parsed price for ${symbol} from ${selector}: ${price}`);
-            break;
-          } else if (potentialPrice > 0) {
-            console.log(`Rejected price ${potentialPrice} from ${selector} (excluded or out of range)`);
+           // Si pas trouvé dans la section principale, chercher dans tout le document
+           if (!priceElement) {
+             priceElement = root.querySelector(selector);
            }
-         }
-      } catch (e) {
-        // Ignorer les erreurs de sélecteur
+           
+           if (priceElement) {
+             // VÉRIFICATION CRITIQUE: S'assurer que cet élément est dans le contexte du bon symbole
+             // Vérifier dans le HTML autour de l'élément
+             const elementHtml = priceElement.outerHTML || priceElement.toString();
+             const elementIndex = htmlContent.indexOf(elementHtml);
+             
+             let foundSymbol = false;
+             if (elementIndex !== -1) {
+               // Chercher le symbole dans un contexte de 500 caractères autour de l'élément
+               const contextStart = Math.max(0, elementIndex - 300);
+               const contextEnd = Math.min(htmlContent.length, elementIndex + elementHtml.length + 300);
+               const context = htmlContent.substring(contextStart, contextEnd);
+               foundSymbol = context.includes(symbol) || context.includes(symbol.replace('!', ''));
+             }
+             
+             // Si toujours pas trouvé, vérifier dans le texte de l'élément
+             if (!foundSymbol) {
+               const elementText = priceElement.text || '';
+               foundSymbol = elementText.includes(symbol);
+             }
+             
+             if (!foundSymbol) {
+               console.log(`⚠️ Price element found but symbol ${symbol} not in context, skipping...`);
+               continue; // Skip cet élément car il ne correspond pas au bon symbole
+             }
+             
+             const rawPriceText = priceElement.text.trim();
+             console.log(`Raw price text for ${symbol} (${selector}): "${rawPriceText.substring(0, 50)}"`);
+             
+             const potentialPrice = parsePriceFromText(rawPriceText);
+             
+            // Validation stricte: exclure les nombres suspects
+            if (potentialPrice > 0 && !excludedNumbers.includes(potentialPrice) && potentialPrice < 100000) {
+              price = potentialPrice;
+              console.log(`✅ Successfully parsed price for ${symbol} from ${selector}: ${price}`);
+              break;
+            } else if (potentialPrice > 0) {
+              console.log(`Rejected price ${potentialPrice} from ${selector} (excluded or out of range)`);
+             }
+           }
+        } catch (e) {
+          // Ignorer les erreurs de sélecteur
+        }
       }
-    }
     } // Fin du bloc if (price === 0) pour les sélecteurs CSS
     
     // Si toujours pas trouvé, chercher dans tous les éléments texte (mais éviter les petits nombres qui sont des changements)
@@ -446,8 +499,8 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
          // Chercher des patterns de prix dans le texte
          if (text && (text.includes('USD') || /^\d{2,4}(?:[.,]\d{1,4})?$/.test(text.replace(/[^\d.,]/g, '')))) {
            const potentialPrice = parsePriceFromText(text);
-          // Validation stricte: prix doit être > 0 et < 50000, exclure les nombres suspects
-          if (potentialPrice > 0 && potentialPrice < 50000 && !excludedNumbers.includes(potentialPrice)) {
+          // Validation stricte: prix doit être > 0 et < 100000, exclure les nombres suspects
+          if (potentialPrice > 0 && potentialPrice < 100000 && !excludedNumbers.includes(potentialPrice)) {
             price = potentialPrice;
             console.log(`✅ Found price in text element for ${symbol}: ${price}`);
             break;
@@ -457,37 +510,52 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
      }
      
      // Recherche améliorée dans le HTML brut - cibler spécifiquement le prix principal
+     // IMPORTANT: Chercher uniquement dans la section principale (avant "Related commodities")
      if (price === 0) {
        console.log(`Searching for price in HTML content for ${symbol}...`);
        
-       // excludedNumbers déjà déclaré plus haut
+       // Trouver la section principale (avant "Related commodities" ou "Related")
+       const relatedIndex = htmlContent.toLowerCase().indexOf('related');
+       const mainSection = relatedIndex > 0 ? htmlContent.substring(0, relatedIndex) : htmlContent.substring(0, Math.min(htmlContent.length, 50000));
        
        // Pattern 1: Chercher le prix principal (nombre suivi de USD, souvent dans un div ou span)
-       // Format typique: "310 USD" ou "310" suivi de "USD" dans un élément adjacent
+       // Format typique: "310 USD" ou "7,287 USD" ou "310" suivi de "USD" dans un élément adjacent
        const mainPricePatterns = [
          // Pattern le plus spécifique: nombre suivi de USD dans un contexte de prix
-         />(\d{1,4}(?:[.,]\d{1,4})?)\s*USD[^<]*</i,  // ">310 USD<" ou ">310 USD</"
-         /(\d{1,4}(?:[.,]\d{1,4})?)\s*USD/i,  // "310 USD" n'importe où
+         />(\d{1,3}(?:,\d{3})*(?:\.\d{1,4})?|\d+(?:\.\d{1,4})?)\s*USD[^<]*</i,  // ">7,287 USD<" ou ">310 USD</"
+         // Pattern pour prix avec séparateurs US: "7,287"
+         />(\d{1,3}(?:,\d{3})*(?:\.\d{1,4})?)\s*USD/i,  // "7,287 USD"
          // Pattern pour structure HTML: <div>310</div><div>USD</div>
-         />(\d{2,4})<\/[^>]*>[^<]*USD/i,  // Nombre dans un tag suivi de USD
-         // Pattern pour prix avec séparateurs
-         />(\d{1,3}(?:,\d{3})*(?:\.\d{1,4})?)\s*USD/i,  // "1,234.56 USD"
+         />(\d{2,5})<\/[^>]*>[^<]*USD/i,  // Nombre dans un tag suivi de USD
          // Pattern pour prix simple
-         />(\d{2,4})<\/[^<]*USD/i  // Nombre suivi de USD dans le contexte proche
+         />(\d{2,5})<\/[^<]*USD/i  // Nombre suivi de USD dans le contexte proche
        ];
        
        for (const pattern of mainPricePatterns) {
-         const matches = htmlContent.match(pattern);
+         const matches = mainSection.match(pattern); // Chercher uniquement dans la section principale
          if (matches && matches[1]) {
            let matchedPrice = matches[1];
+           
+           // VÉRIFICATION: S'assurer que le prix est dans le contexte du bon symbole
+           const matchIndex = mainSection.indexOf(matches[0]);
+           const contextBefore = mainSection.substring(Math.max(0, matchIndex - 300), matchIndex);
+           const contextAfter = mainSection.substring(matchIndex, Math.min(mainSection.length, matchIndex + 300));
+           const fullContext = contextBefore + contextAfter;
+           
+           // Le symbole doit être présent dans le contexte (mais pas trop loin)
+           if (!fullContext.includes(symbol) && !fullContext.includes(symbol.replace('!', ''))) {
+             console.log(`⚠️ Price found but symbol ${symbol} not in context, skipping...`);
+             continue;
+           }
+           
            console.log(`Found potential price match for ${symbol}: "${matchedPrice}"`);
            
            // Nettoyer et parser
            matchedPrice = matchedPrice.replace(/,/g, '');
            const parsedPrice = parseFloat(matchedPrice);
            
-           // Validation: prix raisonnable pour freight (entre 1 et 50000) ET exclure les nombres suspects
-           if (parsedPrice > 0 && parsedPrice < 50000 && parsedPrice >= 1 && !excludedNumbers.includes(parsedPrice)) {
+           // Validation: prix raisonnable pour freight (entre 1 et 100000) ET exclure les nombres suspects
+           if (parsedPrice > 0 && parsedPrice < 100000 && parsedPrice >= 1 && !excludedNumbers.includes(parsedPrice)) {
              price = parsedPrice;
              console.log(`✅ Found main price in HTML for ${symbol}: ${price}`);
              break;
@@ -517,7 +585,7 @@ async function fetchFreightSymbolData(symbol: string, name: string, type: Commod
              const match = scriptContent.match(pattern);
              if (match && match[1]) {
                const parsedPrice = parseFloat(match[1]);
-               if (parsedPrice > 0 && parsedPrice < 50000 && parsedPrice >= 1 && !excludedNumbers.includes(parsedPrice)) {
+               if (parsedPrice > 0 && parsedPrice < 100000 && parsedPrice >= 1 && !excludedNumbers.includes(parsedPrice)) {
                  price = parsedPrice;
                  console.log(`✅ Found price in script JSON for ${symbol}: ${price}`);
                  break;
